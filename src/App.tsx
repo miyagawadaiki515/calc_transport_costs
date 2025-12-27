@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from '@dnd-kit/core';
-import { BasicInfo, Participant, Vehicle, VehicleType, getDriverSeatKey, DualCalculationResult } from './types';
+import { BasicInfo, Participant, Vehicle, VehicleType, VehicleCategory, CostDetail, getDriverSeatKey, DualTripCalculationResult } from './types';
 import BasicInfoForm from './components/BasicInfoForm';
 import ParticipantInput from './components/ParticipantInput';
 import ParticipantBoxes from './components/ParticipantBoxes';
 import VehicleManager from './components/VehicleManager';
 import CalculationResult from './components/CalculationResult';
 import DraggableParticipant from './components/DraggableParticipant';
-import { calculateTransportationCosts } from './utils/calculations';
+import { calculateRoundTripCosts } from './utils/calculations';
 import { exportToCSV, importFromCSV } from './utils/csv';
-import { Calculator, AlertCircle } from 'lucide-react';
+import { Calculator, AlertCircle, Copy } from 'lucide-react';
 
 export default function App() {
   const [basicInfo, setBasicInfo] = useState<BasicInfo>({
@@ -19,14 +19,15 @@ export default function App() {
   });
 
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [result, setResult] = useState<DualCalculationResult | null>(null);
+  const [outboundVehicles, setOutboundVehicles] = useState<Vehicle[]>([]);
+  const [returnVehicles, setReturnVehicles] = useState<Vehicle[]>([]);
+  const [result, setResult] = useState<DualTripCalculationResult | null>(null);
   const [activeParticipant, setActiveParticipant] = useState<Participant | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
   const getAssignedParticipantIds = (): Set<string> => {
     const assignedIds = new Set<string>();
-    vehicles.forEach(vehicle => {
+    [...outboundVehicles, ...returnVehicles].forEach(vehicle => {
       Object.values(vehicle.seats).forEach(participantId => {
         if (participantId) {
           assignedIds.add(participantId);
@@ -56,42 +57,65 @@ export default function App() {
     );
   };
 
-  const handleAddVehicle = () => {
+  const handleAddVehicle = (direction: 'outbound' | 'return') => {
     const newVehicle: Vehicle = {
-      id: `vehicle-${Date.now()}`,
+      id: `vehicle-${direction}-${Date.now()}`,
       type: '5-seater',
-      cost: 0,
+      category: 'private',
       seats: {}
     };
-    setVehicles(prev => [...prev, newVehicle]);
+    if (direction === 'outbound') {
+      setOutboundVehicles(prev => [...prev, newVehicle]);
+    } else {
+      setReturnVehicles(prev => [...prev, newVehicle]);
+    }
   };
 
-  const handleRemoveVehicle = (id: string) => {
-    setVehicles(prev => prev.filter(v => v.id !== id));
+  const handleRemoveVehicle = (id: string, direction: 'outbound' | 'return') => {
+    if (direction === 'outbound') {
+      setOutboundVehicles(prev => prev.filter(v => v.id !== id));
+    } else {
+      setReturnVehicles(prev => prev.filter(v => v.id !== id));
+    }
   };
 
-  const handleVehicleTypeChange = (id: string, type: VehicleType) => {
+  const handleVehicleTypeChange = (id: string, type: VehicleType, direction: 'outbound' | 'return') => {
+    const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
     setVehicles(prev =>
       prev.map(v => v.id === id ? { ...v, type, seats: {} } : v)
     );
   };
 
-  const handleVehicleCostChange = (id: string, cost: number) => {
+  const handleVehicleCategoryChange = (id: string, category: VehicleCategory, direction: 'outbound' | 'return') => {
+    const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
     setVehicles(prev =>
-      prev.map(v => v.id === id ? { ...v, cost } : v)
+      prev.map(v => v.id === id ? { ...v, category, rentalCost: category === 'private' ? undefined : v.rentalCost } : v)
     );
   };
 
-  const handleRemoveFromSeat = (vehicleId: string, seatKey: string) => {
-    const vehicle = vehicles.find(v => v.id === vehicleId);
-    if (!vehicle) return;
+  const handleRentalCostChange = (id: string, cost: number, direction: 'outbound' | 'return') => {
+    const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
+    setVehicles(prev =>
+      prev.map(v => v.id === id ? { ...v, rentalCost: cost } : v)
+    );
+  };
 
-    const participantId = vehicle.seats[seatKey];
-    if (!participantId) return;
+  const handleGasCostChange = (id: string, costDetail: CostDetail | undefined, direction: 'outbound' | 'return') => {
+    const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
+    setVehicles(prev =>
+      prev.map(v => v.id === id ? { ...v, gasCost: costDetail } : v)
+    );
+  };
 
-    const participant = participants.find(p => p.id === participantId);
-    if (!participant) return;
+  const handleHighwayCostChange = (id: string, costDetail: CostDetail | undefined, direction: 'outbound' | 'return') => {
+    const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
+    setVehicles(prev =>
+      prev.map(v => v.id === id ? { ...v, highwayCost: costDetail } : v)
+    );
+  };
 
+  const handleRemoveFromSeat = (vehicleId: string, seatKey: string, direction: 'outbound' | 'return') => {
+    const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
     setVehicles(prev =>
       prev.map(v => {
         if (v.id === vehicleId) {
@@ -102,6 +126,17 @@ export default function App() {
         return v;
       })
     );
+  };
+
+  const handleCopyOutboundToReturn = () => {
+    const copiedVehicles: Vehicle[] = outboundVehicles.map(vehicle => ({
+      ...vehicle,
+      id: `vehicle-return-${Date.now()}-${Math.random()}`,
+      seats: { ...vehicle.seats },
+      gasCost: vehicle.gasCost ? { ...vehicle.gasCost } : undefined,
+      highwayCost: vehicle.highwayCost ? { ...vehicle.highwayCost } : undefined
+    }));
+    setReturnVehicles(copiedVehicles);
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -120,7 +155,15 @@ export default function App() {
 
     if (overId === 'male-box') {
       handleSetGender(participantId, 'male');
-      setVehicles(prev =>
+      setOutboundVehicles(prev =>
+        prev.map(v => ({
+          ...v,
+          seats: Object.fromEntries(
+            Object.entries(v.seats).filter(([_, id]) => id !== participantId)
+          )
+        }))
+      );
+      setReturnVehicles(prev =>
         prev.map(v => ({
           ...v,
           seats: Object.fromEntries(
@@ -130,7 +173,15 @@ export default function App() {
       );
     } else if (overId === 'female-box') {
       handleSetGender(participantId, 'female');
-      setVehicles(prev =>
+      setOutboundVehicles(prev =>
+        prev.map(v => ({
+          ...v,
+          seats: Object.fromEntries(
+            Object.entries(v.seats).filter(([_, id]) => id !== participantId)
+          )
+        }))
+      );
+      setReturnVehicles(prev =>
         prev.map(v => ({
           ...v,
           seats: Object.fromEntries(
@@ -142,7 +193,15 @@ export default function App() {
       setParticipants(prev =>
         prev.map(p => p.id === participantId ? { ...p, gender: undefined } : p)
       );
-      setVehicles(prev =>
+      setOutboundVehicles(prev =>
+        prev.map(v => ({
+          ...v,
+          seats: Object.fromEntries(
+            Object.entries(v.seats).filter(([_, id]) => id !== participantId)
+          )
+        }))
+      );
+      setReturnVehicles(prev =>
         prev.map(v => ({
           ...v,
           seats: Object.fromEntries(
@@ -155,6 +214,9 @@ export default function App() {
       if (dropData && dropData.vehicleId && dropData.seatKey !== undefined) {
         const vehicleId = dropData.vehicleId;
         const seatKey = dropData.seatKey;
+        const direction = dropData.direction as 'outbound' | 'return';
+
+        const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
 
         setVehicles(prev =>
           prev.map(v => ({
@@ -186,25 +248,39 @@ export default function App() {
   const handleCalculate = () => {
     const newErrors: string[] = [];
 
-    if (vehicles.length === 0) {
-      newErrors.push('車両が1台も追加されていません');
+    if (outboundVehicles.length === 0 && returnVehicles.length === 0) {
+      newErrors.push('行きまたは帰りの車両を少なくとも1台追加してください');
     }
 
-    vehicles.forEach((vehicle, index) => {
+    outboundVehicles.forEach((vehicle, index) => {
       const driverSeatKey = getDriverSeatKey(vehicle.type);
       if (!vehicle.seats[driverSeatKey]) {
-        newErrors.push(`車両${index + 1}に運転手が設定されていません`);
+        newErrors.push(`【行き】車両${index + 1}に運転手が設定されていません`);
       }
     });
 
-    const assignedParticipants = new Set<string>();
-    vehicles.forEach(vehicle => {
+    returnVehicles.forEach((vehicle, index) => {
+      const driverSeatKey = getDriverSeatKey(vehicle.type);
+      if (!vehicle.seats[driverSeatKey]) {
+        newErrors.push(`【帰り】車両${index + 1}に運転手が設定されていません`);
+      }
+    });
+
+    const outboundParticipants = new Set<string>();
+    outboundVehicles.forEach(vehicle => {
       Object.values(vehicle.seats).forEach(id => {
-        if (id) assignedParticipants.add(id);
+        if (id) outboundParticipants.add(id);
       });
     });
 
-    if (assignedParticipants.size === 0) {
+    const returnParticipants = new Set<string>();
+    returnVehicles.forEach(vehicle => {
+      Object.values(vehicle.seats).forEach(id => {
+        if (id) returnParticipants.add(id);
+      });
+    });
+
+    if (outboundParticipants.size === 0 && returnParticipants.size === 0) {
       newErrors.push('参加者が誰も座席に配置されていません');
     }
 
@@ -215,13 +291,13 @@ export default function App() {
       return;
     }
 
-    const calculationResult = calculateTransportationCosts(vehicles, participants);
+    const calculationResult = calculateRoundTripCosts(outboundVehicles, returnVehicles, participants);
     setResult(calculationResult);
   };
 
   const handleExport = () => {
     if (!result) return;
-    exportToCSV(basicInfo, participants, vehicles, '');
+    exportToCSV(basicInfo, participants, outboundVehicles, returnVehicles, '');
   };
 
   const handleImport = (file: File) => {
@@ -233,7 +309,8 @@ export default function App() {
       if (data) {
         setBasicInfo(data.basicInfo);
         setParticipants(data.participants);
-        setVehicles(data.vehicles);
+        setOutboundVehicles(data.outboundVehicles);
+        setReturnVehicles(data.returnVehicles);
         setResult(null);
         setErrors([]);
         alert('CSVファイルのインポートが完了しました');
@@ -249,8 +326,8 @@ export default function App() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
         <header className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-6 py-4">
-            <h1 className="text-3xl font-bold text-gray-800">交通費計算アプリ</h1>
-            <p className="text-sm text-gray-600 mt-1">複数台の車での移動費用を公平に分配</p>
+            <h1 className="text-3xl font-bold text-gray-800">交通費計算アプリ（往復対応）</h1>
+            <p className="text-sm text-gray-600 mt-1">複数台の車での移動費用を行き・帰り別々に管理して公平に分配</p>
           </div>
         </header>
 
@@ -261,7 +338,7 @@ export default function App() {
           </div>
 
           <div className="flex gap-6 max-w-[1920px] mx-auto">
-            <div className="w-80 flex-shrink-0 overflow-y-auto max-h-[calc(100vh-300px)] sticky top-0">
+            <div className="w-80 flex-shrink-0 sticky top-4 self-start">
               <ParticipantBoxes
                 participants={participants}
                 assignedParticipantIds={getAssignedParticipantIds()}
@@ -270,16 +347,53 @@ export default function App() {
               />
             </div>
 
-            <div className="flex-1 min-w-0">
-              <VehicleManager
-                vehicles={vehicles}
-                participants={participants}
-                onAddVehicle={handleAddVehicle}
-                onRemoveVehicle={handleRemoveVehicle}
-                onVehicleTypeChange={handleVehicleTypeChange}
-                onVehicleCostChange={handleVehicleCostChange}
-                onRemoveFromSeat={handleRemoveFromSeat}
-              />
+            <div className="flex-1 min-w-0 space-y-6">
+              <div className="bg-blue-50 rounded-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold text-blue-900">行きの車両</h2>
+                </div>
+                <VehicleManager
+                  vehicles={outboundVehicles}
+                  participants={participants}
+                  direction="outbound"
+                  linkedVehicles={returnVehicles}
+                  onAddVehicle={() => handleAddVehicle('outbound')}
+                  onRemoveVehicle={(id) => handleRemoveVehicle(id, 'outbound')}
+                  onVehicleTypeChange={(id, type) => handleVehicleTypeChange(id, type, 'outbound')}
+                  onVehicleCategoryChange={(id, category) => handleVehicleCategoryChange(id, category, 'outbound')}
+                  onRentalCostChange={(id, cost) => handleRentalCostChange(id, cost, 'outbound')}
+                  onGasCostChange={(id, costDetail) => handleGasCostChange(id, costDetail, 'outbound')}
+                  onHighwayCostChange={(id, costDetail) => handleHighwayCostChange(id, costDetail, 'outbound')}
+                  onRemoveFromSeat={(vehicleId, seatKey) => handleRemoveFromSeat(vehicleId, seatKey, 'outbound')}
+                />
+              </div>
+
+              <div className="bg-green-50 rounded-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold text-green-900">帰りの車両</h2>
+                  <button
+                    onClick={handleCopyOutboundToReturn}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md"
+                  >
+                    <Copy size={18} />
+                    帰りも行きと同じ
+                  </button>
+                </div>
+                <VehicleManager
+                  vehicles={returnVehicles}
+                  participants={participants}
+                  direction="return"
+                  linkedVehicles={outboundVehicles}
+                  onAddVehicle={() => handleAddVehicle('return')}
+                  onRemoveVehicle={(id) => handleRemoveVehicle(id, 'return')}
+                  onVehicleTypeChange={(id, type) => handleVehicleTypeChange(id, type, 'return')}
+                  onVehicleCategoryChange={(id, category) => handleVehicleCategoryChange(id, category, 'return')}
+                  onRentalCostChange={(id, cost) => handleRentalCostChange(id, cost, 'return')}
+                  onGasCostChange={(id, costDetail) => handleGasCostChange(id, costDetail, 'return')}
+                  onHighwayCostChange={(id, costDetail) => handleHighwayCostChange(id, costDetail, 'return')}
+                  onRemoveFromSeat={(vehicleId, seatKey) => handleRemoveFromSeat(vehicleId, seatKey, 'return')}
+                />
+              </div>
             </div>
           </div>
 
@@ -312,7 +426,8 @@ export default function App() {
 
             <CalculationResult
               result={result}
-              vehicles={vehicles}
+              outboundVehicles={outboundVehicles}
+              returnVehicles={returnVehicles}
               participants={participants}
               basicInfo={basicInfo}
               onExport={handleExport}

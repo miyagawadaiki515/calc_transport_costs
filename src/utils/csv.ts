@@ -3,7 +3,8 @@ import { BasicInfo, Participant, Vehicle } from '../types';
 export function exportToCSV(
   basicInfo: BasicInfo,
   participants: Participant[],
-  vehicles: Vehicle[],
+  outboundVehicles: Vehicle[],
+  returnVehicles: Vehicle[],
   resultText: string
 ): void {
   const lines: string[] = [];
@@ -21,11 +22,23 @@ export function exportToCSV(
   });
   lines.push('');
 
-  lines.push('# Vehicles');
-  lines.push('id,type,cost,seats');
-  vehicles.forEach(v => {
+  lines.push('# Outbound Vehicles');
+  lines.push('id,type,category,rentalCost,gasCost,highwayCost,seats');
+  outboundVehicles.forEach(v => {
     const seatsJson = JSON.stringify(v.seats);
-    lines.push(`${v.id},${v.type},${v.cost},${escapeCSV(seatsJson)}`);
+    const gasCostJson = v.gasCost ? JSON.stringify(v.gasCost) : '';
+    const highwayCostJson = v.highwayCost ? JSON.stringify(v.highwayCost) : '';
+    lines.push(`${v.id},${v.type},${v.category},${v.rentalCost || ''},${escapeCSV(gasCostJson)},${escapeCSV(highwayCostJson)},${escapeCSV(seatsJson)}`);
+  });
+  lines.push('');
+
+  lines.push('# Return Vehicles');
+  lines.push('id,type,category,rentalCost,gasCost,highwayCost,seats');
+  returnVehicles.forEach(v => {
+    const seatsJson = JSON.stringify(v.seats);
+    const gasCostJson = v.gasCost ? JSON.stringify(v.gasCost) : '';
+    const highwayCostJson = v.highwayCost ? JSON.stringify(v.highwayCost) : '';
+    lines.push(`${v.id},${v.type},${v.category},${v.rentalCost || ''},${escapeCSV(gasCostJson)},${escapeCSV(highwayCostJson)},${escapeCSV(seatsJson)}`);
   });
   lines.push('');
 
@@ -70,7 +83,8 @@ export function importFromCSV(
 ): {
   basicInfo: BasicInfo;
   participants: Participant[];
-  vehicles: Vehicle[];
+  outboundVehicles: Vehicle[];
+  returnVehicles: Vehicle[];
 } | null {
   try {
     const lines = content.split('\n').map(line => line.trim()).filter(line => line);
@@ -78,7 +92,8 @@ export function importFromCSV(
     let section = '';
     const basicInfo: BasicInfo = { purpose: '', departureTime: '', meetingPlace: '' };
     const participants: Participant[] = [];
-    const vehicles: Vehicle[] = [];
+    const outboundVehicles: Vehicle[] = [];
+    const returnVehicles: Vehicle[] = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -89,8 +104,11 @@ export function importFromCSV(
       } else if (line.startsWith('# Participants')) {
         section = 'participants';
         continue;
-      } else if (line.startsWith('# Vehicles')) {
-        section = 'vehicles';
+      } else if (line.startsWith('# Outbound Vehicles')) {
+        section = 'outboundVehicles';
+        continue;
+      } else if (line.startsWith('# Return Vehicles')) {
+        section = 'returnVehicles';
         continue;
       } else if (line.startsWith('# Result')) {
         break;
@@ -112,21 +130,38 @@ export function importFromCSV(
             gender: parts[2] ? (parts[2] as 'male' | 'female') : undefined
           });
         }
-      } else if (section === 'vehicles') {
-        if (line === 'id,type,cost,seats') continue;
+      } else if (section === 'outboundVehicles') {
+        if (line.startsWith('id,type,')) continue;
         const parts = parseCSVLine(line);
-        if (parts.length >= 4) {
-          vehicles.push({
+        if (parts.length >= 7) {
+          outboundVehicles.push({
             id: parts[0],
             type: parts[1] as any,
-            cost: parseFloat(parts[2]) || 0,
-            seats: JSON.parse(unescapeCSV(parts[3]))
+            category: (parts[2] as 'private' | 'rental') || 'private',
+            rentalCost: parts[3] ? parseFloat(parts[3]) : undefined,
+            gasCost: parts[4] ? JSON.parse(unescapeCSV(parts[4])) : undefined,
+            highwayCost: parts[5] ? JSON.parse(unescapeCSV(parts[5])) : undefined,
+            seats: JSON.parse(unescapeCSV(parts[6]))
+          });
+        }
+      } else if (section === 'returnVehicles') {
+        if (line.startsWith('id,type,')) continue;
+        const parts = parseCSVLine(line);
+        if (parts.length >= 7) {
+          returnVehicles.push({
+            id: parts[0],
+            type: parts[1] as any,
+            category: (parts[2] as 'private' | 'rental') || 'private',
+            rentalCost: parts[3] ? parseFloat(parts[3]) : undefined,
+            gasCost: parts[4] ? JSON.parse(unescapeCSV(parts[4])) : undefined,
+            highwayCost: parts[5] ? JSON.parse(unescapeCSV(parts[5])) : undefined,
+            seats: JSON.parse(unescapeCSV(parts[6]))
           });
         }
       }
     }
 
-    return { basicInfo, participants, vehicles };
+    return { basicInfo, participants, outboundVehicles, returnVehicles };
   } catch (error) {
     console.error('CSV import error:', error);
     return null;

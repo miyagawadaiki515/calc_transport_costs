@@ -5,10 +5,11 @@ import DraggableParticipant from './DraggableParticipant';
 interface SeatLayoutProps {
   vehicle: Vehicle;
   participants: Participant[];
+  direction: 'outbound' | 'return';
   onRemoveFromSeat: (vehicleId: string, seatKey: string) => void;
 }
 
-export default function SeatLayout({ vehicle, participants, onRemoveFromSeat }: SeatLayoutProps) {
+export default function SeatLayout({ vehicle, participants, direction, onRemoveFromSeat }: SeatLayoutProps) {
   const config = VEHICLE_CONFIGS[vehicle.type];
 
   const getSeatKey = (row: number, seat: number) => `${row}-${seat}`;
@@ -28,6 +29,7 @@ export default function SeatLayout({ vehicle, participants, onRemoveFromSeat }: 
                 key={seatKey}
                 seatKey={seatKey}
                 vehicleId={vehicle.id}
+                direction={direction}
                 participant={participant}
                 isDriver={isDriverSeat}
                 onRemove={onRemoveFromSeat}
@@ -43,16 +45,17 @@ export default function SeatLayout({ vehicle, participants, onRemoveFromSeat }: 
 interface SeatProps {
   seatKey: string;
   vehicleId: string;
+  direction: 'outbound' | 'return';
   participant?: Participant;
   isDriver: boolean;
   onRemove: (vehicleId: string, seatKey: string) => void;
 }
 
-function Seat({ seatKey, vehicleId, participant, isDriver, onRemove }: SeatProps) {
+function Seat({ seatKey, vehicleId, direction, participant, isDriver, onRemove }: SeatProps) {
   const dropId = `${vehicleId}-${seatKey}`;
   const { setNodeRef, isOver } = useDroppable({
     id: dropId,
-    data: { vehicleId, seatKey }
+    data: { vehicleId, seatKey, direction }
   });
 
   const baseClasses = "w-20 h-24 border-2 rounded-lg flex flex-col items-center justify-center transition-all";

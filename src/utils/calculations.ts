@@ -1,4 +1,38 @@
-import { Vehicle, Participant, CalculationResult, DualCalculationResult, getDriverSeatKey } from '../types';
+import { Vehicle, Participant, CalculationResult, DualCalculationResult, TripCalculationResult, DualTripCalculationResult, getDriverSeatKey } from '../types';
+
+function calculateVehicleCost(vehicle: Vehicle, direction: 'outbound' | 'return', linkedVehicle?: Vehicle): number {
+  let totalCost = 0;
+
+  if (direction === 'outbound') {
+    if (vehicle.category === 'rental' && vehicle.rentalCost) {
+      totalCost += vehicle.rentalCost / 2;
+    }
+    if (vehicle.gasCost) {
+      totalCost += vehicle.gasCost.amount;
+    }
+    if (vehicle.highwayCost) {
+      totalCost += vehicle.highwayCost.amount;
+    }
+  } else {
+    const isRentalAlreadyCounted = linkedVehicle?.category === 'rental';
+    const isGasRoundTrip = linkedVehicle?.gasCost?.type === 'round-trip';
+    const isHighwayRoundTrip = linkedVehicle?.highwayCost?.type === 'round-trip';
+
+    if (isRentalAlreadyCounted && vehicle.category === 'rental' && vehicle.rentalCost) {
+      totalCost += vehicle.rentalCost / 2;
+    } else if (!isRentalAlreadyCounted && vehicle.category === 'rental' && vehicle.rentalCost) {
+      totalCost += vehicle.rentalCost;
+    }
+    if (!isGasRoundTrip && vehicle.gasCost) {
+      totalCost += vehicle.gasCost.amount;
+    }
+    if (!isHighwayRoundTrip && vehicle.highwayCost) {
+      totalCost += vehicle.highwayCost.amount;
+    }
+  }
+
+  return totalCost;
+}
 
 function calculateSinglePattern(
   vehicles: Vehicle[],
@@ -18,16 +52,18 @@ function calculateSinglePattern(
     const driverParticipant = participants.find(p => p.id === driverParticipantId);
     const driverName = driverParticipant?.name || '未設定';
 
-    const passengerCount = Object.values(vehicle.seats).filter(id => id).length;
+    const totalInVehicle = Object.values(vehicle.seats).filter(id => id).length;
+    const passengerCount = totalInVehicle > 0 ? totalInVehicle - 1 : 0;
     const collectionAmount = passengerCount * perPersonCost;
+    const actualCost = calculateVehicleCost(vehicle, 'outbound');
 
     return {
       vehicleId: vehicle.id,
       driverName,
       passengerCount,
       collectionAmount,
-      actualCost: vehicle.cost || 0,
-      difference: (vehicle.cost || 0) - collectionAmount
+      actualCost,
+      difference: actualCost - collectionAmount
     };
   });
 
@@ -66,6 +102,91 @@ function calculateSinglePattern(
   const totalCollected = vehicleCollections.reduce((sum, vc) => sum + vc.collectionAmount, 0);
   const totalDriverLoss = totalCollected - totalCost;
 
+  const driverBalanceMap = new Map<string, { vehicleCost: number; collectedAmount: number; adjustments: number }>();
+
+  vehicleCollections.forEach(vc => {
+    driverBalanceMap.set(vc.driverName, {
+      vehicleCost: vc.actualCost,
+      collectedAmount: vc.collectionAmount,
+      adjustments: 0
+    });
+  });
+
+  driverAdjustments.forEach(adj => {
+    const giver = driverBalanceMap.get(adj.from);
+    const receiver = driverBalanceMap.get(adj.to);
+    if (giver) giver.adjustments -= adj.amount;
+    if (receiver) receiver.adjustments += adj.amount;
+  });
+
+  const driverNames = Array.from(driverBalanceMap.keys());
+  const driverCount = driverNames.length;
+
+  const currentBalances = new Map<string, number>();
+  driverNames.forEach(name => {
+    const data = driverBalanceMap.get(name)!;
+    currentBalances.set(name, data.collectedAmount - data.vehicleCost + data.adjustments);
+  });
+
+  const totalBalance = Array.from(currentBalances.values()).reduce((sum, balance) => sum + balance, 0);
+
+  const baseAmount = Math.floor(totalBalance / driverCount / 100) * 100;
+  const remainder = totalBalance - (baseAmount * driverCount);
+  const extraCount = Math.round(remainder / 100);
+
+  const targetBalances = new Map<string, number>();
+  driverNames.forEach((name, index) => {
+    targetBalances.set(name, baseAmount + (index < extraCount ? 100 : 0));
+  });
+
+  const equalizationNeeds: Array<{ name: string; amount: number }> = [];
+  const equalizationSurplus: Array<{ name: string; amount: number }> = [];
+
+  driverNames.forEach(name => {
+    const currentBalance = currentBalances.get(name)!;
+    const targetBalance = targetBalances.get(name)!;
+    const diff = targetBalance - currentBalance;
+
+    if (diff > 0) {
+      equalizationNeeds.push({ name, amount: diff });
+    } else if (diff < 0) {
+      equalizationSurplus.push({ name, amount: Math.abs(diff) });
+    }
+  });
+
+  let ei = 0, ej = 0;
+  while (ei < equalizationSurplus.length && ej < equalizationNeeds.length) {
+    const giver = equalizationSurplus[ei];
+    const receiver = equalizationNeeds[ej];
+    const transferAmount = Math.min(giver.amount, receiver.amount);
+
+    if (transferAmount > 0) {
+      driverAdjustments.push({
+        from: giver.name,
+        to: receiver.name,
+        amount: Math.round(transferAmount)
+      });
+
+      const giverData = driverBalanceMap.get(giver.name)!;
+      const receiverData = driverBalanceMap.get(receiver.name)!;
+      giverData.adjustments -= transferAmount;
+      receiverData.adjustments += transferAmount;
+    }
+
+    giver.amount -= transferAmount;
+    receiver.amount -= transferAmount;
+
+    if (giver.amount === 0) ei++;
+    if (receiver.amount === 0) ej++;
+  }
+
+  const driverFinalBalances = Array.from(driverBalanceMap.entries()).map(([driverName, data]) => ({
+    driverName,
+    vehicleCost: data.vehicleCost,
+    collectedAmount: data.collectedAmount,
+    finalBalance: data.collectedAmount - data.vehicleCost + data.adjustments
+  }));
+
   return {
     totalCost,
     totalParticipants,
@@ -78,7 +199,8 @@ function calculateSinglePattern(
       passengerCount: vc.passengerCount,
       collectionAmount: vc.collectionAmount
     })),
-    driverAdjustments
+    driverAdjustments,
+    driverFinalBalances
   };
 }
 
@@ -86,10 +208,18 @@ export function calculateTransportationCosts(
   vehicles: Vehicle[],
   participants: Participant[]
 ): DualCalculationResult {
-  const totalCost = vehicles.reduce((sum, v) => sum + (v.cost || 0), 0);
+  const totalCost = vehicles.reduce((sum, v) => sum + calculateVehicleCost(v, 'outbound'), 0);
 
   const allAssignedParticipants = new Set<string>();
+  const driverIds = new Set<string>();
+
   vehicles.forEach(vehicle => {
+    const driverSeatKey = getDriverSeatKey(vehicle.type);
+    const driverParticipantId = vehicle.seats[driverSeatKey];
+    if (driverParticipantId) {
+      driverIds.add(driverParticipantId);
+    }
+
     Object.values(vehicle.seats).forEach(participantId => {
       if (participantId) {
         allAssignedParticipants.add(participantId);
@@ -97,11 +227,18 @@ export function calculateTransportationCosts(
     });
   });
 
-  const totalParticipants = allAssignedParticipants.size;
+  const totalParticipants = allAssignedParticipants.size - driverIds.size;
+
+  const roundUp = calculateSinglePattern(vehicles, participants, totalCost, totalParticipants, 'up');
+  const roundDown = calculateSinglePattern(vehicles, participants, totalCost, totalParticipants, 'down');
+
+  const roundUpTotal = roundUp.driverAdjustments.reduce((sum, adj) => sum + adj.amount, 0);
+  const roundDownTotal = roundDown.driverAdjustments.reduce((sum, adj) => sum + adj.amount, 0);
 
   return {
-    roundUp: calculateSinglePattern(vehicles, participants, totalCost, totalParticipants, 'up'),
-    roundDown: calculateSinglePattern(vehicles, participants, totalCost, totalParticipants, 'down')
+    roundUp,
+    roundDown,
+    recommendedMethod: roundUpTotal <= roundDownTotal ? 'roundUp' : 'roundDown'
   };
 }
 
@@ -135,7 +272,8 @@ export function generateResultText(
   text += `集合場所: ${basicInfo.meetingPlace || '未入力'}\n\n`;
 
   vehicles.forEach((vehicle, index) => {
-    text += `【車両${index + 1}】\n`;
+    const categoryLabel = vehicle.category === 'rental' ? 'レンタカー' : '自家用車';
+    text += `【車両${index + 1}】(${categoryLabel})\n`;
 
     const driverSeatKey = getDriverSeatKey(vehicle.type);
     const driverParticipantId = vehicle.seats[driverSeatKey];
@@ -148,7 +286,23 @@ export function generateResultText(
       .filter(Boolean);
 
     text += `乗車メンバー: ${passengers.length > 0 ? passengers.join(', ') : 'なし'}\n`;
-    text += `車両費用: ${vehicle.cost || 0}円\n\n`;
+
+    text += '費用内訳:\n';
+    if (vehicle.category === 'rental' && vehicle.rentalCost) {
+      const halfCost = vehicle.rentalCost / 2;
+      text += `  レンタカー代: ${halfCost.toLocaleString()}円(往復${vehicle.rentalCost.toLocaleString()}円の半額)\n`;
+    }
+    if (vehicle.gasCost) {
+      const typeLabel = vehicle.gasCost.type === 'round-trip' ? '往復' : '片道';
+      text += `  ガソリン代: ${vehicle.gasCost.amount.toLocaleString()}円(${typeLabel})\n`;
+    }
+    if (vehicle.highwayCost) {
+      const typeLabel = vehicle.highwayCost.type === 'round-trip' ? '往復' : '片道';
+      text += `  高速代: ${vehicle.highwayCost.amount.toLocaleString()}円(${typeLabel})\n`;
+    }
+
+    const vehicleCost = calculateVehicleCost(vehicle, 'outbound');
+    text += `車両費用合計: ${vehicleCost.toLocaleString()}円\n\n`;
   });
 
   text += '【費用計算】\n';
@@ -171,6 +325,655 @@ export function generateResultText(
       text += `${adj.from}は${adj.amount}円を${adj.to}に渡す\n`;
     });
   }
+
+  text += '\n【運転手の最終収支】\n';
+  result.driverFinalBalances.forEach(balance => {
+    const sign = balance.finalBalance >= 0 ? '+' : '';
+    text += `${balance.driverName}: 車両費用${balance.vehicleCost}円 - 徴収${balance.collectedAmount}円 = ${sign}${balance.finalBalance}円\n`;
+  });
+
+  return text;
+}
+
+function calculateTripPattern(
+  outboundVehicles: Vehicle[],
+  returnVehicles: Vehicle[],
+  participants: Participant[],
+  roundingMode: 'up' | 'down',
+  returnAdjustment: number = 0
+): TripCalculationResult {
+  const outboundCost = outboundVehicles.reduce((sum, v) => {
+    return sum + calculateVehicleCost(v, 'outbound');
+  }, 0);
+
+  const returnCost = returnVehicles.reduce((sum, v, index) => {
+    const linkedVehicle = outboundVehicles[index];
+    return sum + calculateVehicleCost(v, 'return', linkedVehicle);
+  }, 0);
+
+  const totalCost = outboundCost + returnCost;
+
+  const outboundParticipantIds = new Set<string>();
+  const outboundDriverIds = new Set<string>();
+  outboundVehicles.forEach(vehicle => {
+    const driverSeatKey = getDriverSeatKey(vehicle.type);
+    const driverParticipantId = vehicle.seats[driverSeatKey];
+    if (driverParticipantId) {
+      outboundDriverIds.add(driverParticipantId);
+    }
+    Object.values(vehicle.seats).forEach(id => {
+      if (id) outboundParticipantIds.add(id);
+    });
+  });
+
+  const returnParticipantIds = new Set<string>();
+  const returnDriverIds = new Set<string>();
+  returnVehicles.forEach(vehicle => {
+    const driverSeatKey = getDriverSeatKey(vehicle.type);
+    const driverParticipantId = vehicle.seats[driverSeatKey];
+    if (driverParticipantId) {
+      returnDriverIds.add(driverParticipantId);
+    }
+    Object.values(vehicle.seats).forEach(id => {
+      if (id) returnParticipantIds.add(id);
+    });
+  });
+
+  const allParticipantIds = new Set([...outboundParticipantIds, ...returnParticipantIds]);
+  const allDriverIds = new Set([...outboundDriverIds, ...returnDriverIds]);
+
+  const outboundParticipants = outboundParticipantIds.size - outboundDriverIds.size;
+  const returnParticipants = returnParticipantIds.size - returnDriverIds.size;
+  const allParticipants = allParticipantIds.size - allDriverIds.size;
+
+  const rawOutboundPerPerson = outboundParticipants > 0 ? outboundCost / outboundParticipants : 0;
+  const rawReturnPerPerson = returnParticipants > 0 ? returnCost / returnParticipants : 0;
+
+  const outboundPerPerson = roundingMode === 'up'
+    ? Math.ceil(rawOutboundPerPerson / 100) * 100
+    : Math.floor(rawOutboundPerPerson / 100) * 100;
+
+  const baseReturnPerPerson = roundingMode === 'up'
+    ? Math.ceil(rawReturnPerPerson / 100) * 100
+    : Math.floor(rawReturnPerPerson / 100) * 100;
+
+  const returnPerPerson = baseReturnPerPerson + returnAdjustment;
+
+  const participantCosts = Array.from(allParticipantIds).map(participantId => {
+    const participant = participants.find(p => p.id === participantId);
+    const isDriver = allDriverIds.has(participantId);
+    const isOutbound = outboundParticipantIds.has(participantId);
+    const isReturn = returnParticipantIds.has(participantId);
+
+    return {
+      participantId,
+      name: participant?.name || '不明',
+      isDriver,
+      outboundCost: isDriver ? 0 : (isOutbound ? outboundPerPerson : 0),
+      returnCost: isDriver ? 0 : (isReturn ? returnPerPerson : 0),
+      totalCost: isDriver ? 0 : ((isOutbound ? outboundPerPerson : 0) + (isReturn ? returnPerPerson : 0))
+    };
+  });
+
+  const outboundCollections = outboundVehicles.map((vehicle) => {
+    const driverSeatKey = getDriverSeatKey(vehicle.type);
+    const driverParticipantId = vehicle.seats[driverSeatKey];
+    const driverParticipant = participants.find(p => p.id === driverParticipantId);
+    const totalInVehicle = Object.values(vehicle.seats).filter(id => id).length;
+    const passengerCount = totalInVehicle > 0 ? totalInVehicle - 1 : 0;
+    const actualCost = calculateVehicleCost(vehicle, 'outbound');
+
+    return {
+      vehicleId: vehicle.id,
+      driverName: driverParticipant?.name || '未設定',
+      passengerCount,
+      perPersonCost: outboundPerPerson,
+      collectionAmount: passengerCount * outboundPerPerson,
+      actualCost
+    };
+  });
+
+  const returnCollections = returnVehicles.map((vehicle, index) => {
+    const driverSeatKey = getDriverSeatKey(vehicle.type);
+    const driverParticipantId = vehicle.seats[driverSeatKey];
+    const driverParticipant = participants.find(p => p.id === driverParticipantId);
+    const totalInVehicle = Object.values(vehicle.seats).filter(id => id).length;
+    const passengerCount = totalInVehicle > 0 ? totalInVehicle - 1 : 0;
+    const linkedVehicle = outboundVehicles[index];
+    const actualCost = calculateVehicleCost(vehicle, 'return', linkedVehicle);
+
+    return {
+      vehicleId: vehicle.id,
+      driverName: driverParticipant?.name || '未設定',
+      passengerCount,
+      perPersonCost: returnPerPerson,
+      collectionAmount: passengerCount * returnPerPerson,
+      actualCost
+    };
+  });
+
+  const driverDifferences = new Map<string, number>();
+
+  outboundCollections.forEach(vc => {
+    const diff = vc.actualCost - vc.collectionAmount;
+    driverDifferences.set(vc.driverName, (driverDifferences.get(vc.driverName) || 0) + diff);
+  });
+
+  returnCollections.forEach(vc => {
+    const diff = vc.actualCost - vc.collectionAmount;
+    driverDifferences.set(vc.driverName, (driverDifferences.get(vc.driverName) || 0) + diff);
+  });
+
+  const driversNeedingMoney: Array<{ name: string; amount: number }> = [];
+  const driversWithExtraMoney: Array<{ name: string; amount: number }> = [];
+
+  driverDifferences.forEach((amount, name) => {
+    if (amount > 0) {
+      driversNeedingMoney.push({ name, amount });
+    } else if (amount < 0) {
+      driversWithExtraMoney.push({ name, amount: Math.abs(amount) });
+    }
+  });
+
+  const driverAdjustments: Array<{ from: string; to: string; amount: number }> = [];
+  let i = 0, j = 0;
+  while (i < driversWithExtraMoney.length && j < driversNeedingMoney.length) {
+    const giver = driversWithExtraMoney[i];
+    const receiver = driversNeedingMoney[j];
+    const transferAmount = Math.min(giver.amount, receiver.amount);
+
+    if (transferAmount > 0) {
+      driverAdjustments.push({
+        from: giver.name,
+        to: receiver.name,
+        amount: Math.round(transferAmount)
+      });
+    }
+
+    giver.amount -= transferAmount;
+    receiver.amount -= transferAmount;
+
+    if (giver.amount === 0) i++;
+    if (receiver.amount === 0) j++;
+  }
+
+  const driverBalanceMap = new Map<string, { outboundCost: number; returnCost: number; collectedAmount: number; adjustments: number }>();
+
+  outboundCollections.forEach(vc => {
+    const existing = driverBalanceMap.get(vc.driverName) || { outboundCost: 0, returnCost: 0, collectedAmount: 0, adjustments: 0 };
+    existing.outboundCost = vc.actualCost;
+    existing.collectedAmount += vc.collectionAmount;
+    driverBalanceMap.set(vc.driverName, existing);
+  });
+
+  returnCollections.forEach(vc => {
+    const existing = driverBalanceMap.get(vc.driverName) || { outboundCost: 0, returnCost: 0, collectedAmount: 0, adjustments: 0 };
+    existing.returnCost = vc.actualCost;
+    existing.collectedAmount += vc.collectionAmount;
+    driverBalanceMap.set(vc.driverName, existing);
+  });
+
+  driverAdjustments.forEach(adj => {
+    const giver = driverBalanceMap.get(adj.from);
+    const receiver = driverBalanceMap.get(adj.to);
+    if (giver) giver.adjustments -= adj.amount;
+    if (receiver) receiver.adjustments += adj.amount;
+  });
+
+  const driverNames = Array.from(driverBalanceMap.keys());
+  const driverCount = driverNames.length;
+
+  const currentBalances = new Map<string, number>();
+  driverNames.forEach(name => {
+    const data = driverBalanceMap.get(name)!;
+    currentBalances.set(name, data.collectedAmount - (data.outboundCost + data.returnCost) + data.adjustments);
+  });
+
+  const totalBalance = Array.from(currentBalances.values()).reduce((sum, balance) => sum + balance, 0);
+
+  const baseAmount = Math.floor(totalBalance / driverCount / 100) * 100;
+  const remainder = totalBalance - (baseAmount * driverCount);
+  const extraCount = Math.round(remainder / 100);
+
+  const targetBalances = new Map<string, number>();
+  driverNames.forEach((name, index) => {
+    targetBalances.set(name, baseAmount + (index < extraCount ? 100 : 0));
+  });
+
+  const equalizationNeeds: Array<{ name: string; amount: number }> = [];
+  const equalizationSurplus: Array<{ name: string; amount: number }> = [];
+
+  driverNames.forEach(name => {
+    const currentBalance = currentBalances.get(name)!;
+    const targetBalance = targetBalances.get(name)!;
+    const diff = targetBalance - currentBalance;
+
+    if (diff > 0) {
+      equalizationNeeds.push({ name, amount: diff });
+    } else if (diff < 0) {
+      equalizationSurplus.push({ name, amount: Math.abs(diff) });
+    }
+  });
+
+  let ei = 0, ej = 0;
+  while (ei < equalizationSurplus.length && ej < equalizationNeeds.length) {
+    const giver = equalizationSurplus[ei];
+    const receiver = equalizationNeeds[ej];
+    const transferAmount = Math.min(giver.amount, receiver.amount);
+
+    if (transferAmount > 0) {
+      driverAdjustments.push({
+        from: giver.name,
+        to: receiver.name,
+        amount: Math.round(transferAmount)
+      });
+
+      const giverData = driverBalanceMap.get(giver.name)!;
+      const receiverData = driverBalanceMap.get(receiver.name)!;
+      giverData.adjustments -= transferAmount;
+      receiverData.adjustments += transferAmount;
+    }
+
+    giver.amount -= transferAmount;
+    receiver.amount -= transferAmount;
+
+    if (giver.amount === 0) ei++;
+    if (receiver.amount === 0) ej++;
+  }
+
+  const driverFinalBalances = Array.from(driverBalanceMap.entries()).map(([driverName, data]) => ({
+    driverName,
+    outboundCost: data.outboundCost,
+    returnCost: data.returnCost,
+    totalVehicleCost: data.outboundCost + data.returnCost,
+    collectedAmount: data.collectedAmount,
+    finalBalance: data.collectedAmount - (data.outboundCost + data.returnCost) + data.adjustments
+  }));
+
+  return {
+    outboundCost,
+    returnCost,
+    outboundParticipants,
+    returnParticipants,
+    totalCost,
+    allParticipants,
+    outboundPerPerson,
+    returnPerPerson,
+    participantCosts,
+    outboundCollections: outboundCollections.map(vc => ({
+      vehicleId: vc.vehicleId,
+      driverName: vc.driverName,
+      passengerCount: vc.passengerCount,
+      perPersonCost: vc.perPersonCost,
+      collectionAmount: vc.collectionAmount
+    })),
+    returnCollections: returnCollections.map(vc => ({
+      vehicleId: vc.vehicleId,
+      driverName: vc.driverName,
+      passengerCount: vc.passengerCount,
+      perPersonCost: vc.perPersonCost,
+      collectionAmount: vc.collectionAmount
+    })),
+    driverAdjustments,
+    driverFinalBalances
+  };
+}
+
+export function calculateRoundTripCosts(
+  outboundVehicles: Vehicle[],
+  returnVehicles: Vehicle[],
+  participants: Participant[]
+): DualTripCalculationResult {
+  const hasReturn = returnVehicles.length > 0;
+  const hasOutbound = outboundVehicles.length > 0;
+
+  const adjustments = hasReturn && hasOutbound ? [-100, 0, 100] : [0];
+
+  let bestPattern: { result: TripCalculationResult; method: 'roundUp' | 'roundDown'; adjustment: number; score: number } | null = null;
+
+  for (const roundingMode of ['up', 'down'] as const) {
+    for (const adjustment of adjustments) {
+      const result = calculateTripPattern(outboundVehicles, returnVehicles, participants, roundingMode, adjustment);
+
+      const score = result.driverFinalBalances.reduce((sum, balance) => sum + Math.abs(balance.finalBalance), 0);
+
+      if (bestPattern === null || score < bestPattern.score) {
+        bestPattern = {
+          result,
+          method: roundingMode === 'up' ? 'roundUp' : 'roundDown',
+          adjustment,
+          score
+        };
+      }
+    }
+  }
+
+  const roundUp = bestPattern!.method === 'roundUp'
+    ? bestPattern!.result
+    : calculateTripPattern(outboundVehicles, returnVehicles, participants, 'up', 0);
+
+  const roundDown = bestPattern!.method === 'roundDown'
+    ? bestPattern!.result
+    : calculateTripPattern(outboundVehicles, returnVehicles, participants, 'down', 0);
+
+  return {
+    roundUp,
+    roundDown,
+    recommendedMethod: bestPattern!.method,
+    returnAdjustment: bestPattern!.adjustment
+  };
+}
+
+export function generateTripResultText(
+  basicInfo: { purpose: string; departureTime: string; meetingPlace: string },
+  outboundVehicles: Vehicle[],
+  returnVehicles: Vehicle[],
+  participants: Participant[],
+  result: TripCalculationResult,
+  roundingMode: 'up' | 'down',
+  returnAdjustment: number = 0
+): string {
+  let text = '【移動情報】\n';
+  text += `目的: ${basicInfo.purpose || '未入力'}\n`;
+  text += `出発時間: ${formatDateTime(basicInfo.departureTime)}\n`;
+  text += `集合場所: ${basicInfo.meetingPlace || '未入力'}\n\n`;
+
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n';
+  text += '【行き】\n';
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n\n';
+
+  outboundVehicles.forEach((vehicle, index) => {
+    const categoryLabel = vehicle.category === 'rental' ? 'レンタカー' : '自家用車';
+    text += `【車両${index + 1}】(${categoryLabel})\n`;
+    const driverSeatKey = getDriverSeatKey(vehicle.type);
+    const driverParticipantId = vehicle.seats[driverSeatKey];
+    const driverParticipant = participants.find(p => p.id === driverParticipantId);
+    text += `運転手: ${driverParticipant?.name || '未設定'}\n`;
+
+    const passengers = Object.entries(vehicle.seats)
+      .filter(([key, id]) => key !== driverSeatKey && id)
+      .map(([_, id]) => participants.find(p => p.id === id)?.name)
+      .filter(Boolean);
+
+    text += `乗車メンバー: ${passengers.length > 0 ? passengers.join(', ') : 'なし'}\n`;
+
+    text += '費用内訳:\n';
+    if (vehicle.category === 'rental' && vehicle.rentalCost) {
+      const halfCost = vehicle.rentalCost / 2;
+      text += `  レンタカー代: ${halfCost.toLocaleString()}円(往復${vehicle.rentalCost.toLocaleString()}円の半額)\n`;
+    }
+    if (vehicle.gasCost) {
+      const typeLabel = vehicle.gasCost.type === 'round-trip' ? '往復' : '片道';
+      text += `  ガソリン代: ${vehicle.gasCost.amount.toLocaleString()}円(${typeLabel})\n`;
+    }
+    if (vehicle.highwayCost) {
+      const typeLabel = vehicle.highwayCost.type === 'round-trip' ? '往復' : '片道';
+      text += `  高速代: ${vehicle.highwayCost.amount.toLocaleString()}円(${typeLabel})\n`;
+    }
+
+    const vehicleCost = calculateVehicleCost(vehicle, 'outbound');
+    text += `車両費用合計: ${vehicleCost.toLocaleString()}円\n\n`;
+  });
+
+  text += `行き 小計: ${result.outboundCost}円\n`;
+  text += `行き 参加者数: ${result.outboundParticipants}人\n\n`;
+
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n';
+  text += '【帰り】\n';
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n\n';
+
+  returnVehicles.forEach((vehicle, index) => {
+    const categoryLabel = vehicle.category === 'rental' ? 'レンタカー' : '自家用車';
+    text += `【車両${index + 1}】(${categoryLabel})\n`;
+    const driverSeatKey = getDriverSeatKey(vehicle.type);
+    const driverParticipantId = vehicle.seats[driverSeatKey];
+    const driverParticipant = participants.find(p => p.id === driverParticipantId);
+    text += `運転手: ${driverParticipant?.name || '未設定'}\n`;
+
+    const passengers = Object.entries(vehicle.seats)
+      .filter(([key, id]) => key !== driverSeatKey && id)
+      .map(([_, id]) => participants.find(p => p.id === id)?.name)
+      .filter(Boolean);
+
+    text += `乗車メンバー: ${passengers.length > 0 ? passengers.join(', ') : 'なし'}\n`;
+
+    const linkedVehicle = outboundVehicles[index];
+    const isRentalAlreadyCounted = linkedVehicle?.category === 'rental';
+    const isGasRoundTrip = linkedVehicle?.gasCost?.type === 'round-trip';
+    const isHighwayRoundTrip = linkedVehicle?.highwayCost?.type === 'round-trip';
+
+    text += '費用内訳:\n';
+    if (vehicle.category === 'rental') {
+      if (isRentalAlreadyCounted && vehicle.rentalCost) {
+        const halfCost = vehicle.rentalCost / 2;
+        text += `  レンタカー代: ${halfCost.toLocaleString()}円(往復${vehicle.rentalCost.toLocaleString()}円の半額)\n`;
+      } else if (vehicle.rentalCost) {
+        text += `  レンタカー代: ${vehicle.rentalCost.toLocaleString()}円(往復分)\n`;
+      }
+    }
+    if (isGasRoundTrip) {
+      text += '  ガソリン代: (往復分として計上済み)\n';
+    } else if (vehicle.gasCost) {
+      const typeLabel = vehicle.gasCost.type === 'round-trip' ? '往復' : '片道';
+      text += `  ガソリン代: ${vehicle.gasCost.amount.toLocaleString()}円(${typeLabel})\n`;
+    }
+    if (isHighwayRoundTrip) {
+      text += '  高速代: (往復分として計上済み)\n';
+    } else if (vehicle.highwayCost) {
+      const typeLabel = vehicle.highwayCost.type === 'round-trip' ? '往復' : '片道';
+      text += `  高速代: ${vehicle.highwayCost.amount.toLocaleString()}円(${typeLabel})\n`;
+    }
+
+    const vehicleCost = calculateVehicleCost(vehicle, 'return', linkedVehicle);
+    text += `車両費用合計: ${vehicleCost.toLocaleString()}円\n\n`;
+  });
+
+  text += `帰り 小計: ${result.returnCost}円\n`;
+  text += `帰り 参加者数: ${result.returnParticipants}人\n\n`;
+
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n';
+  text += '【費用計算(往復合算)】\n';
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n\n';
+
+  text += `総費用: ${result.totalCost}円\n`;
+  text += `全参加者数: ${result.allParticipants}人\n`;
+  text += `計算方式: 100円単位で${roundingMode === 'up' ? '切り上げ' : '切り捨て'}\n`;
+  if (returnAdjustment !== 0) {
+    text += `※帰りの一人当たり金額を${returnAdjustment > 0 ? '+' : ''}${returnAdjustment}円調整（運転手収支最適化）\n`;
+  }
+  text += '\n【個人別負担】\n';
+  result.participantCosts.forEach(pc => {
+    if (pc.isDriver) {
+      text += `${pc.name}: 差額を運転手間で調整\n`;
+    } else if (pc.outboundCost > 0 && pc.returnCost > 0) {
+      const outboundDriver = outboundVehicles.map(v => {
+        const driverSeatKey = getDriverSeatKey(v.type);
+        const driverParticipantId = v.seats[driverSeatKey];
+        const hasParticipant = Object.values(v.seats).includes(pc.participantId);
+        return hasParticipant ? participants.find(p => p.id === driverParticipantId)?.name : null;
+      }).find(name => name);
+
+      const returnDriver = returnVehicles.map(v => {
+        const driverSeatKey = getDriverSeatKey(v.type);
+        const driverParticipantId = v.seats[driverSeatKey];
+        const hasParticipant = Object.values(v.seats).includes(pc.participantId);
+        return hasParticipant ? participants.find(p => p.id === driverParticipantId)?.name : null;
+      }).find(name => name);
+
+      const driverText = outboundDriver === returnDriver
+        ? `を${outboundDriver}に支払い`
+        : `を行き${outboundDriver}、帰り${returnDriver}に支払い`;
+
+      text += `${pc.name}: 行き${pc.outboundCost}円 + 帰り${pc.returnCost}円 = 合計${pc.totalCost}円${driverText}\n`;
+    } else if (pc.outboundCost > 0) {
+      const outboundDriver = outboundVehicles.map(v => {
+        const driverSeatKey = getDriverSeatKey(v.type);
+        const driverParticipantId = v.seats[driverSeatKey];
+        const hasParticipant = Object.values(v.seats).includes(pc.participantId);
+        return hasParticipant ? participants.find(p => p.id === driverParticipantId)?.name : null;
+      }).find(name => name);
+
+      text += `${pc.name}: 行きのみ${pc.outboundCost}円を${outboundDriver}に支払い\n`;
+    } else if (pc.returnCost > 0) {
+      const returnDriver = returnVehicles.map(v => {
+        const driverSeatKey = getDriverSeatKey(v.type);
+        const driverParticipantId = v.seats[driverSeatKey];
+        const hasParticipant = Object.values(v.seats).includes(pc.participantId);
+        return hasParticipant ? participants.find(p => p.id === driverParticipantId)?.name : null;
+      }).find(name => name);
+
+      text += `${pc.name}: 帰りのみ${pc.returnCost}円を${returnDriver}に支払い\n`;
+    }
+  });
+
+  text += '\n【各車での徴収(行き)】\n';
+  result.outboundCollections.forEach((vc, index) => {
+    text += `車両${index + 1}: ${vc.driverName}が${vc.passengerCount}人から${vc.perPersonCost}円ずつ徴収 → 合計${vc.collectionAmount}円\n`;
+  });
+
+  text += '\n【各車での徴収(帰り)】\n';
+  result.returnCollections.forEach((vc, index) => {
+    text += `車両${index + 1}: ${vc.driverName}が${vc.passengerCount}人から${vc.perPersonCost}円ずつ徴収 → 合計${vc.collectionAmount}円\n`;
+  });
+
+  text += '\n【運転手間の差額調整(往復トータル)】\n';
+  if (result.driverAdjustments.length === 0) {
+    text += '調整不要\n';
+  } else {
+    result.driverAdjustments.forEach(adj => {
+      text += `${adj.from}は${adj.amount}円を${adj.to}に渡す\n`;
+    });
+  }
+
+  text += '\n【運転手の最終収支】\n';
+  result.driverFinalBalances.forEach(balance => {
+    const sign = balance.finalBalance >= 0 ? '+' : '';
+    text += `${balance.driverName}: 車両費用合計${balance.totalVehicleCost}円(行き${balance.outboundCost}円+帰り${balance.returnCost}円) - 徴収${balance.collectedAmount}円 = ${sign}${balance.finalBalance}円\n`;
+  });
+
+  return text;
+}
+
+export function generateSimpleTripResultText(
+  basicInfo: { purpose: string; departureTime: string; meetingPlace: string },
+  outboundVehicles: Vehicle[],
+  returnVehicles: Vehicle[],
+  participants: Participant[],
+  result: TripCalculationResult,
+  returnAdjustment: number = 0
+): string {
+  let text = '【移動情報】\n';
+  text += `目的: ${basicInfo.purpose || '未入力'}\n`;
+  text += `出発時間: ${formatDateTime(basicInfo.departureTime)}\n`;
+  text += `集合場所: ${basicInfo.meetingPlace || '未入力'}\n\n`;
+
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n';
+  text += '【行き】\n';
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n\n';
+
+  outboundVehicles.forEach((vehicle, index) => {
+    const categoryLabel = vehicle.category === 'rental' ? 'レンタカー' : '自家用車';
+    text += `【車両${index + 1}】(${categoryLabel})\n`;
+    const driverSeatKey = getDriverSeatKey(vehicle.type);
+    const driverParticipantId = vehicle.seats[driverSeatKey];
+    const driverParticipant = participants.find(p => p.id === driverParticipantId);
+    text += `運転手: ${driverParticipant?.name || '未設定'}\n`;
+
+    const passengers = Object.entries(vehicle.seats)
+      .filter(([key, id]) => key !== driverSeatKey && id)
+      .map(([_, id]) => participants.find(p => p.id === id)?.name)
+      .filter(Boolean);
+
+    text += `乗車メンバー: ${passengers.length > 0 ? passengers.join(', ') : 'なし'}\n\n`;
+  });
+
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n';
+  text += '【帰り】\n';
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n\n';
+
+  returnVehicles.forEach((vehicle, index) => {
+    const categoryLabel = vehicle.category === 'rental' ? 'レンタカー' : '自家用車';
+    text += `【車両${index + 1}】(${categoryLabel})\n`;
+    const driverSeatKey = getDriverSeatKey(vehicle.type);
+    const driverParticipantId = vehicle.seats[driverSeatKey];
+    const driverParticipant = participants.find(p => p.id === driverParticipantId);
+    text += `運転手: ${driverParticipant?.name || '未設定'}\n`;
+
+    const passengers = Object.entries(vehicle.seats)
+      .filter(([key, id]) => key !== driverSeatKey && id)
+      .map(([_, id]) => participants.find(p => p.id === id)?.name)
+      .filter(Boolean);
+
+    text += `乗車メンバー: ${passengers.length > 0 ? passengers.join(', ') : 'なし'}\n\n`;
+  });
+
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n';
+  text += '【費用計算(往復合算)】\n';
+  text += '━━━━━━━━━━━━━━━━━━━━━━\n\n';
+
+  if (returnAdjustment !== 0) {
+    text += `※帰りの一人当たり金額を${returnAdjustment > 0 ? '+' : ''}${returnAdjustment}円調整（運転手収支最適化）\n\n`;
+  }
+
+  text += '【個人別負担】\n';
+  result.participantCosts.forEach(pc => {
+    if (pc.isDriver) {
+      text += `${pc.name}: 差額を運転手間で調整\n`;
+    } else if (pc.outboundCost > 0 && pc.returnCost > 0) {
+      const outboundDriver = outboundVehicles.map(v => {
+        const driverSeatKey = getDriverSeatKey(v.type);
+        const driverParticipantId = v.seats[driverSeatKey];
+        const hasParticipant = Object.values(v.seats).includes(pc.participantId);
+        return hasParticipant ? participants.find(p => p.id === driverParticipantId)?.name : null;
+      }).find(name => name);
+
+      const returnDriver = returnVehicles.map(v => {
+        const driverSeatKey = getDriverSeatKey(v.type);
+        const driverParticipantId = v.seats[driverSeatKey];
+        const hasParticipant = Object.values(v.seats).includes(pc.participantId);
+        return hasParticipant ? participants.find(p => p.id === driverParticipantId)?.name : null;
+      }).find(name => name);
+
+      const driverText = outboundDriver === returnDriver
+        ? `を${outboundDriver}に支払い`
+        : `を行き${outboundDriver}、帰り${returnDriver}に支払い`;
+
+      text += `${pc.name}: 行き${pc.outboundCost}円 + 帰り${pc.returnCost}円 = 合計${pc.totalCost}円${driverText}\n`;
+    } else if (pc.outboundCost > 0) {
+      const outboundDriver = outboundVehicles.map(v => {
+        const driverSeatKey = getDriverSeatKey(v.type);
+        const driverParticipantId = v.seats[driverSeatKey];
+        const hasParticipant = Object.values(v.seats).includes(pc.participantId);
+        return hasParticipant ? participants.find(p => p.id === driverParticipantId)?.name : null;
+      }).find(name => name);
+
+      text += `${pc.name}: 行きのみ${pc.outboundCost}円を${outboundDriver}に支払い\n`;
+    } else if (pc.returnCost > 0) {
+      const returnDriver = returnVehicles.map(v => {
+        const driverSeatKey = getDriverSeatKey(v.type);
+        const driverParticipantId = v.seats[driverSeatKey];
+        const hasParticipant = Object.values(v.seats).includes(pc.participantId);
+        return hasParticipant ? participants.find(p => p.id === driverParticipantId)?.name : null;
+      }).find(name => name);
+
+      text += `${pc.name}: 帰りのみ${pc.returnCost}円を${returnDriver}に支払い\n`;
+    }
+  });
+
+  text += '\n【運転手間の差額調整(往復トータル)】\n';
+  if (result.driverAdjustments.length === 0) {
+    text += '調整不要\n';
+  } else {
+    result.driverAdjustments.forEach(adj => {
+      text += `${adj.from}は${adj.amount}円を${adj.to}に渡す\n`;
+    });
+  }
+
+  text += '\n【運転手の最終収支】\n';
+  result.driverFinalBalances.forEach(balance => {
+    const sign = balance.finalBalance >= 0 ? '+' : '';
+    text += `${balance.driverName}: 車両費用合計${balance.totalVehicleCost}円(行き${balance.outboundCost}円+帰り${balance.returnCost}円) - 徴収${balance.collectedAmount}円 = ${sign}${balance.finalBalance}円\n`;
+  });
 
   return text;
 }

@@ -7,6 +7,13 @@ export interface Participant {
 }
 
 export type VehicleType = '4-seater' | '5-seater' | '7-seater' | '8-seater' | 'hiace-10' | 'hiace-14';
+export type VehicleCategory = 'private' | 'rental';
+export type CostType = 'one-way' | 'round-trip';
+
+export interface CostDetail {
+  amount: number;
+  type: CostType;
+}
 
 export interface SeatPosition {
   row: number;
@@ -17,7 +24,10 @@ export interface SeatPosition {
 export interface Vehicle {
   id: string;
   type: VehicleType;
-  cost: number;
+  category: VehicleCategory;
+  rentalCost?: number;
+  gasCost?: CostDetail;
+  highwayCost?: CostDetail;
   seats: { [key: string]: string };
 }
 
@@ -44,11 +54,71 @@ export interface CalculationResult {
     to: string;
     amount: number;
   }>;
+  driverFinalBalances: Array<{
+    driverName: string;
+    vehicleCost: number;
+    collectedAmount: number;
+    finalBalance: number;
+  }>;
 }
 
 export interface DualCalculationResult {
   roundUp: CalculationResult;
   roundDown: CalculationResult;
+  recommendedMethod: 'roundUp' | 'roundDown';
+}
+
+export interface TripCalculationResult {
+  outboundCost: number;
+  returnCost: number;
+  outboundParticipants: number;
+  returnParticipants: number;
+  totalCost: number;
+  allParticipants: number;
+  outboundPerPerson: number;
+  returnPerPerson: number;
+  participantCosts: Array<{
+    participantId: string;
+    name: string;
+    isDriver: boolean;
+    outboundCost: number;
+    returnCost: number;
+    totalCost: number;
+  }>;
+  outboundCollections: Array<{
+    vehicleId: string;
+    driverName: string;
+    passengerCount: number;
+    perPersonCost: number;
+    collectionAmount: number;
+  }>;
+  returnCollections: Array<{
+    vehicleId: string;
+    driverName: string;
+    passengerCount: number;
+    perPersonCost: number;
+    collectionAmount: number;
+  }>;
+  driverAdjustments: Array<{
+    from: string;
+    to: string;
+    amount: number;
+  }>;
+  driverFinalBalances: Array<{
+    driverName: string;
+    outboundCost: number;
+    returnCost: number;
+    totalVehicleCost: number;
+    collectedAmount: number;
+    finalBalance: number;
+  }>;
+}
+
+export interface DualTripCalculationResult {
+  roundUp: TripCalculationResult;
+  roundDown: TripCalculationResult;
+  recommendedMethod: 'roundUp' | 'roundDown';
+  returnAdjustment: number;
 }
 
 export function getDriverSeatKey(vehicleType: VehicleType): string {

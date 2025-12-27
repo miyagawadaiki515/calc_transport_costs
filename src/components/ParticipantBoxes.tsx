@@ -20,7 +20,7 @@ export default function ParticipantBoxes({ participants, assignedParticipantIds,
   const { setNodeRef: setFemaleRef } = useDroppable({ id: 'female-box' });
 
   return (
-    <div className="space-y-4">
+    <div className="max-h-[calc(100vh-200px)] overflow-y-auto space-y-4 pr-2">
       {unassigned.length > 0 && (
         <div className="bg-white rounded-lg shadow-md p-4">
           <h3 className="text-sm font-semibold mb-3 text-gray-700 flex items-center gap-2">
@@ -63,7 +63,7 @@ export default function ParticipantBoxes({ participants, assignedParticipantIds,
         </h3>
         <div
           ref={setMaleRef}
-          className="border-2 border-blue-300 rounded-lg p-3 min-h-[300px] bg-blue-50"
+          className="border-2 border-blue-300 rounded-lg p-3 min-h-[200px] bg-blue-50"
         >
           {males.length === 0 ? (
             <p className="text-blue-300 text-sm text-center mt-8">参加者をドラッグしてください</p>
@@ -88,7 +88,7 @@ export default function ParticipantBoxes({ participants, assignedParticipantIds,
         </h3>
         <div
           ref={setFemaleRef}
-          className="border-2 border-red-300 rounded-lg p-3 min-h-[300px] bg-red-50"
+          className="border-2 border-red-300 rounded-lg p-3 min-h-[200px] bg-red-50"
         >
           {females.length === 0 ? (
             <p className="text-red-300 text-sm text-center mt-8">参加者をドラッグしてください</p>
