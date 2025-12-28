@@ -266,8 +266,7 @@ export function generateResultText(
   result: CalculationResult,
   roundingMode: 'up' | 'down'
 ): string {
-  let text = '【移動情報】\n';
-  text += `目的: ${basicInfo.purpose || '未入力'}\n`;
+  let text = `目的: ${basicInfo.purpose || '未入力'}\n`;
   text += `出発日時: ${formatDateTime(basicInfo.departureTime)}\n`;
   text += `集合場所: ${basicInfo.meetingPlace || '未入力'}\n\n`;
 
@@ -673,8 +672,7 @@ export function generateTripResultText(
   roundingMode: 'up' | 'down',
   returnAdjustment: number = 0
 ): string {
-  let text = '【移動情報】\n';
-  text += `目的: ${basicInfo.purpose || '未入力'}\n`;
+  let text = `目的: ${basicInfo.purpose || '未入力'}\n`;
   text += `出発時間: ${formatDateTime(basicInfo.departureTime)}\n`;
   text += `集合場所: ${basicInfo.meetingPlace || '未入力'}\n\n`;
 
@@ -862,8 +860,7 @@ export function generateSimpleTripResultText(
   result: TripCalculationResult,
   returnAdjustment: number = 0
 ): string {
-  let text = '【移動情報】\n';
-  text += `目的: ${basicInfo.purpose || '未入力'}\n`;
+  let text = `目的: ${basicInfo.purpose || '未入力'}\n`;
   text += `出発時間: ${formatDateTime(basicInfo.departureTime)}\n`;
   text += `集合場所: ${basicInfo.meetingPlace || '未入力'}\n\n`;
 
