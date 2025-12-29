@@ -6,7 +6,7 @@ export interface Participant {
   gender?: Gender;
 }
 
-export type VehicleType = '4-seater' | '5-seater' | '7-seater' | '8-seater' | 'hiace-10' | 'hiace-14';
+export type VehicleType = '4-seater' | '5-seater' | '7-seater' | '8-seater' | 'hiace-10' | 'custom';
 export type VehicleCategory = 'private' | 'rental';
 export type CostType = 'one-way' | 'round-trip';
 
@@ -21,14 +21,22 @@ export interface SeatPosition {
   isDriver?: boolean;
 }
 
+export interface SeatAssignment {
+  participantId?: string;
+  name: string;
+  gender: Gender;
+  isManualEntry: boolean;
+}
+
 export interface Vehicle {
   id: string;
   type: VehicleType;
   category: VehicleCategory;
+  customCapacity?: number;
   rentalCost?: number;
   gasCost?: CostDetail;
   highwayCost?: CostDetail;
-  seats: { [key: string]: string };
+  seats: { [key: string]: SeatAssignment };
 }
 
 export interface BasicInfo {
@@ -118,11 +126,12 @@ export interface DualTripCalculationResult {
   roundUp: TripCalculationResult;
   roundDown: TripCalculationResult;
   recommendedMethod: 'roundUp' | 'roundDown';
+  outboundAdjustment: number;
   returnAdjustment: number;
 }
 
-export function getDriverSeatKey(vehicleType: VehicleType): string {
-  const config = VEHICLE_CONFIGS[vehicleType];
+export function getDriverSeatKey(vehicle: Vehicle): string {
+  const config = getVehicleConfig(vehicle);
   const driverRow = config.layout.find(row => row.isDriverRow);
   if (driverRow) {
     return `0-${driverRow.seats - 1}`;
@@ -170,22 +179,64 @@ export const VEHICLE_CONFIGS: Record<VehicleType, {
     ]
   },
   'hiace-10': {
-    name: 'ハイエースバン(10人乗り)',
+    name: 'ハイエース(10人乗り)',
     capacity: 10,
     layout: [
       { row: 0, seats: 2, isDriverRow: true },
-      { row: 1, seats: 4 },
-      { row: 2, seats: 4 }
+      { row: 1, seats: 3 },
+      { row: 2, seats: 2 },
+      { row: 3, seats: 3 }
     ]
   },
-  'hiace-14': {
-    name: 'ハイエースバン(14人乗り)',
-    capacity: 14,
+  'custom': {
+    name: 'カスタム',
+    capacity: 5,
     layout: [
       { row: 0, seats: 2, isDriverRow: true },
-      { row: 1, seats: 4 },
-      { row: 2, seats: 4 },
-      { row: 3, seats: 4 }
+      { row: 1, seats: 3 }
     ]
   }
 };
+
+export function getVehicleConfig(vehicle: Vehicle): {
+  name: string;
+  capacity: number;
+  layout: Array<{ row: number; seats: number; isDriverRow?: boolean }>;
+} {
+  const baseConfig = VEHICLE_CONFIGS[vehicle.type];
+
+  if (vehicle.type === 'custom' && vehicle.customCapacity && vehicle.customCapacity >= 2) {
+    const capacity = vehicle.customCapacity;
+    const layout: Array<{ row: number; seats: number; isDriverRow?: boolean }> = [
+      { row: 0, seats: 2, isDriverRow: true }
+    ];
+
+    let remainingSeats = capacity - 2;
+    let row = 1;
+
+    while (remainingSeats > 0) {
+      if (remainingSeats >= 4) {
+        layout.push({ row, seats: 4 });
+        remainingSeats -= 4;
+      } else if (remainingSeats === 3) {
+        layout.push({ row, seats: 3 });
+        remainingSeats = 0;
+      } else if (remainingSeats === 2) {
+        layout.push({ row, seats: 2 });
+        remainingSeats = 0;
+      } else {
+        layout.push({ row, seats: 1 });
+        remainingSeats = 0;
+      }
+      row++;
+    }
+
+    return {
+      name: `カスタム(${capacity}人乗り)`,
+      capacity,
+      layout
+    };
+  }
+
+  return baseConfig;
+}

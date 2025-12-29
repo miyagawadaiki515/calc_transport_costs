@@ -59,46 +59,6 @@ function ResultColumn({
             <p>帰り一人当たり: {result.returnPerPerson.toLocaleString()}円</p>
           </div>
         </div>
-
-        <div className="bg-white rounded p-3">
-          <h4 className="font-semibold text-gray-700 mb-2">個人別負担（一部抜粋）</h4>
-          <div className="space-y-2 text-sm">
-            {result.participantCosts.slice(0, 5).map((pc) => (
-              <div key={pc.participantId} className="border-l-2 border-blue-400 pl-2">
-                <p className="font-medium">{pc.name}</p>
-                {pc.outboundCost > 0 && pc.returnCost > 0 ? (
-                  <p className="text-gray-600">
-                    行き{pc.outboundCost.toLocaleString()}円 + 帰り{pc.returnCost.toLocaleString()}円 = {pc.totalCost.toLocaleString()}円
-                  </p>
-                ) : pc.outboundCost > 0 ? (
-                  <p className="text-gray-600">行きのみ {pc.outboundCost.toLocaleString()}円</p>
-                ) : (
-                  <p className="text-gray-600">帰りのみ {pc.returnCost.toLocaleString()}円</p>
-                )}
-              </div>
-            ))}
-            {result.participantCosts.length > 5 && (
-              <p className="text-xs text-gray-500 text-center pt-2">
-                他 {result.participantCosts.length - 5}名（詳細は展開用テキストで確認）
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded p-3">
-          <h4 className="font-semibold text-gray-700 mb-2">運転手間の差額調整（往復トータル）</h4>
-          {result.driverAdjustments.length === 0 ? (
-            <p className="text-sm text-gray-600">調整不要</p>
-          ) : (
-            <div className="space-y-1 text-sm">
-              {result.driverAdjustments.map((adj, index) => (
-                <p key={index} className="text-gray-700">
-                  {adj.from} → {adj.to}: {adj.amount.toLocaleString()}円
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -138,8 +98,9 @@ export default function CalculationResult({
     const selectedResult = selectedRounding === 'up' ? result.roundUp : result.roundDown;
     const isRecommendedMethod = (selectedRounding === 'up' && result.recommendedMethod === 'roundUp') ||
                                  (selectedRounding === 'down' && result.recommendedMethod === 'roundDown');
-    const adjustmentToUse = isRecommendedMethod ? result.returnAdjustment : 0;
-    const text = generateTripResultText(basicInfo, outboundVehicles, returnVehicles, participants, selectedResult, selectedRounding, adjustmentToUse);
+    const outboundAdjustmentToUse = isRecommendedMethod ? result.outboundAdjustment : 0;
+    const returnAdjustmentToUse = isRecommendedMethod ? result.returnAdjustment : 0;
+    const text = generateTripResultText(basicInfo, outboundVehicles, returnVehicles, participants, selectedResult, selectedRounding, outboundAdjustmentToUse, returnAdjustmentToUse);
     setExpandedText(text);
   };
 
@@ -148,8 +109,9 @@ export default function CalculationResult({
     const selectedResult = selectedRounding === 'up' ? result.roundUp : result.roundDown;
     const isRecommendedMethod = (selectedRounding === 'up' && result.recommendedMethod === 'roundUp') ||
                                  (selectedRounding === 'down' && result.recommendedMethod === 'roundDown');
-    const adjustmentToUse = isRecommendedMethod ? result.returnAdjustment : 0;
-    const text = generateSimpleTripResultText(basicInfo, outboundVehicles, returnVehicles, participants, selectedResult, adjustmentToUse);
+    const outboundAdjustmentToUse = isRecommendedMethod ? result.outboundAdjustment : 0;
+    const returnAdjustmentToUse = isRecommendedMethod ? result.returnAdjustment : 0;
+    const text = generateSimpleTripResultText(basicInfo, outboundVehicles, returnVehicles, participants, selectedResult, outboundAdjustmentToUse, returnAdjustmentToUse);
     setExpandedText(text);
   };
 
@@ -165,13 +127,13 @@ export default function CalculationResult({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">計算結果</h2>
-        <div className="flex gap-2">
-          <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors cursor-pointer">
+    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+        <h2 className="text-lg sm:text-xl font-bold text-gray-800">計算結果</h2>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <label className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors cursor-pointer min-h-[44px]">
             <Upload size={20} />
-            CSVインポート
+            <span className="text-sm sm:text-base">CSVインポート</span>
             <input
               type="file"
               accept=".csv"
@@ -182,31 +144,49 @@ export default function CalculationResult({
           <button
             onClick={onExport}
             disabled={!result}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-[44px]"
           >
             <Download size={20} />
-            CSVエクスポート
+            <span className="text-sm sm:text-base">CSVエクスポート</span>
           </button>
         </div>
       </div>
 
       {result ? (
         <div className="space-y-6">
-          <div className="flex gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
             <ResultColumn
               title="100円単位で切り上げ"
               result={result.roundUp}
               isRecommended={result.recommendedMethod === 'roundUp'}
-              adjustmentInfo={result.recommendedMethod === 'roundUp' && result.returnAdjustment !== 0
-                ? `帰り${result.returnAdjustment > 0 ? '+' : ''}${result.returnAdjustment}円調整`
+              adjustmentInfo={result.recommendedMethod === 'roundUp' && (result.outboundAdjustment !== 0 || result.returnAdjustment !== 0)
+                ? (() => {
+                    const adjustments: string[] = [];
+                    if (result.outboundAdjustment !== 0) {
+                      adjustments.push(`行き${result.outboundAdjustment > 0 ? '+' : ''}${result.outboundAdjustment}円`);
+                    }
+                    if (result.returnAdjustment !== 0) {
+                      adjustments.push(`帰り${result.returnAdjustment > 0 ? '+' : ''}${result.returnAdjustment}円`);
+                    }
+                    return adjustments.join('、') + '調整';
+                  })()
                 : undefined}
             />
             <ResultColumn
               title="100円単位で切り捨て"
               result={result.roundDown}
               isRecommended={result.recommendedMethod === 'roundDown'}
-              adjustmentInfo={result.recommendedMethod === 'roundDown' && result.returnAdjustment !== 0
-                ? `帰り${result.returnAdjustment > 0 ? '+' : ''}${result.returnAdjustment}円調整`
+              adjustmentInfo={result.recommendedMethod === 'roundDown' && (result.outboundAdjustment !== 0 || result.returnAdjustment !== 0)
+                ? (() => {
+                    const adjustments: string[] = [];
+                    if (result.outboundAdjustment !== 0) {
+                      adjustments.push(`行き${result.outboundAdjustment > 0 ? '+' : ''}${result.outboundAdjustment}円`);
+                    }
+                    if (result.returnAdjustment !== 0) {
+                      adjustments.push(`帰り${result.returnAdjustment > 0 ? '+' : ''}${result.returnAdjustment}円`);
+                    }
+                    return adjustments.join('、') + '調整';
+                  })()
                 : undefined}
             />
           </div>

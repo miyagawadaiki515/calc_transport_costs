@@ -1,4 +1,5 @@
-import { Vehicle, Participant, VEHICLE_CONFIGS, VehicleType, VehicleCategory, CostDetail } from '../types';
+import { useState, useEffect } from 'react';
+import { Vehicle, Participant, VEHICLE_CONFIGS, getVehicleConfig, VehicleType, VehicleCategory, CostDetail, SeatAssignment } from '../types';
 import SeatLayout from './SeatLayout';
 import { Car, Trash2 } from 'lucide-react';
 
@@ -7,14 +8,18 @@ interface VehicleCardProps {
   index: number;
   participants: Participant[];
   direction: 'outbound' | 'return';
+  allVehicles: Vehicle[];
   linkedVehicle?: Vehicle;
   onTypeChange: (id: string, type: VehicleType) => void;
   onCategoryChange: (id: string, category: VehicleCategory) => void;
+  onCustomCapacityChange: (id: string, capacity: number) => void;
   onRentalCostChange: (id: string, cost: number) => void;
   onGasCostChange: (id: string, costDetail: CostDetail | undefined) => void;
   onHighwayCostChange: (id: string, costDetail: CostDetail | undefined) => void;
   onRemove: (id: string) => void;
+  onAssignSeat: (vehicleId: string, seatKey: string, assignment: SeatAssignment) => void;
   onRemoveFromSeat: (vehicleId: string, seatKey: string) => void;
+  onToggleGender: (vehicleId: string, seatKey: string) => void;
 }
 
 export default function VehicleCard({
@@ -22,18 +27,28 @@ export default function VehicleCard({
   index,
   participants,
   direction,
+  allVehicles,
   linkedVehicle,
   onTypeChange,
   onCategoryChange,
+  onCustomCapacityChange,
   onRentalCostChange,
   onGasCostChange,
   onHighwayCostChange,
   onRemove,
-  onRemoveFromSeat
+  onAssignSeat,
+  onRemoveFromSeat,
+  onToggleGender
 }: VehicleCardProps) {
-  const driverSeatKey = '0-0';
-  const driverParticipantId = vehicle.seats[driverSeatKey];
-  const hasDriver = !!driverParticipantId;
+  const driverSeatKey = '0-1';
+  const driverSeat = vehicle.seats[driverSeatKey];
+  const hasDriver = !!driverSeat;
+
+  const [localCapacity, setLocalCapacity] = useState<string>(String(vehicle.customCapacity ?? 5));
+
+  useEffect(() => {
+    setLocalCapacity(String(vehicle.customCapacity ?? 5));
+  }, [vehicle.customCapacity]);
 
   const isGasDisabledByLinked = direction === 'return' && linkedVehicle?.gasCost?.type === 'round-trip';
   const isHighwayDisabledByLinked = direction === 'return' && linkedVehicle?.highwayCost?.type === 'round-trip';
@@ -77,6 +92,44 @@ export default function VehicleCard({
             ))}
           </select>
         </div>
+
+        {vehicle.type === 'custom' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              乗車人数
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={localCapacity}
+              onChange={(e) => {
+                const value = e.target.value;
+                setLocalCapacity(value);
+                if (value !== '' && !isNaN(parseInt(value))) {
+                  const numValue = parseInt(value);
+                  if (numValue >= 1) {
+                    onCustomCapacityChange(vehicle.id, numValue);
+                  }
+                }
+              }}
+              onBlur={() => {
+                const numValue = parseInt(localCapacity);
+                if (isNaN(numValue) || numValue < 2) {
+                  setLocalCapacity('2');
+                  onCustomCapacityChange(vehicle.id, 2);
+                } else if (numValue > 50) {
+                  setLocalCapacity('50');
+                  onCustomCapacityChange(vehicle.id, 50);
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+              placeholder="5"
+              min="2"
+              max="50"
+            />
+            <p className="text-xs text-gray-500 mt-1">2〜50人まで設定可能</p>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -122,9 +175,20 @@ export default function VehicleCard({
                 </label>
                 <input
                   type="number"
-                  value={vehicle.rentalCost || ''}
-                  onChange={(e) => onRentalCostChange(vehicle.id, parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  inputMode="numeric"
+                  value={vehicle.rentalCost ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '') {
+                      onRentalCostChange(vehicle.id, 0);
+                    } else {
+                      const amount = parseFloat(value);
+                      if (!isNaN(amount) && amount >= 0) {
+                        onRentalCostChange(vehicle.id, amount);
+                      }
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                   placeholder="0"
                   min="0"
                 />
@@ -146,22 +210,26 @@ export default function VehicleCard({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 ガソリン代
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="number"
-                  value={vehicle.gasCost?.amount || ''}
+                  inputMode="numeric"
+                  value={vehicle.gasCost?.amount ?? ''}
                   onChange={(e) => {
-                    const amount = parseFloat(e.target.value);
-                    if (amount) {
-                      onGasCostChange(vehicle.id, {
-                        amount,
-                        type: vehicle.gasCost?.type || 'one-way'
-                      });
-                    } else {
+                    const value = e.target.value;
+                    if (value === '') {
                       onGasCostChange(vehicle.id, undefined);
+                    } else {
+                      const amount = parseFloat(value);
+                      if (!isNaN(amount) && amount >= 0) {
+                        onGasCostChange(vehicle.id, {
+                          amount,
+                          type: vehicle.gasCost?.type || 'one-way'
+                        });
+                      }
                     }
                   }}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                   placeholder="0"
                   min="0"
                 />
@@ -176,7 +244,7 @@ export default function VehicleCard({
                     }
                   }}
                   disabled={!vehicle.gasCost}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500 min-h-[44px]"
                 >
                   <option value="one-way">片道</option>
                   <option value="round-trip">往復</option>
@@ -199,22 +267,26 @@ export default function VehicleCard({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 高速代
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="number"
-                  value={vehicle.highwayCost?.amount || ''}
+                  inputMode="numeric"
+                  value={vehicle.highwayCost?.amount ?? ''}
                   onChange={(e) => {
-                    const amount = parseFloat(e.target.value);
-                    if (amount) {
-                      onHighwayCostChange(vehicle.id, {
-                        amount,
-                        type: vehicle.highwayCost?.type || 'one-way'
-                      });
-                    } else {
+                    const value = e.target.value;
+                    if (value === '') {
                       onHighwayCostChange(vehicle.id, undefined);
+                    } else {
+                      const amount = parseFloat(value);
+                      if (!isNaN(amount) && amount >= 0) {
+                        onHighwayCostChange(vehicle.id, {
+                          amount,
+                          type: vehicle.highwayCost?.type || 'one-way'
+                        });
+                      }
                     }
                   }}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                   placeholder="0"
                   min="0"
                 />
@@ -229,7 +301,7 @@ export default function VehicleCard({
                     }
                   }}
                   disabled={!vehicle.highwayCost}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500 min-h-[44px]"
                 >
                   <option value="one-way">片道</option>
                   <option value="round-trip">往復</option>
@@ -246,7 +318,10 @@ export default function VehicleCard({
           vehicle={vehicle}
           participants={participants}
           direction={direction}
+          allVehicles={allVehicles}
+          onAssignSeat={onAssignSeat}
           onRemoveFromSeat={onRemoveFromSeat}
+          onToggleGender={onToggleGender}
         />
       </div>
     </div>

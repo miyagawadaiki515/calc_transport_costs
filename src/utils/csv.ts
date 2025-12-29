@@ -16,9 +16,9 @@ export function exportToCSV(
   lines.push('');
 
   lines.push('# Participants');
-  lines.push('id,name,gender');
+  lines.push('id,name');
   participants.forEach(p => {
-    lines.push(`${p.id},${escapeCSV(p.name)},${p.gender || ''}`);
+    lines.push(`${p.id},${escapeCSV(p.name)}`);
   });
   lines.push('');
 
@@ -121,13 +121,12 @@ export function importFromCSV(
         else if (key === 'departureTime') basicInfo.departureTime = value;
         else if (key === 'meetingPlace') basicInfo.meetingPlace = value;
       } else if (section === 'participants') {
-        if (line === 'id,name,gender') continue;
+        if (line === 'id,name' || line === 'id,name,gender') continue;
         const parts = parseCSVLine(line);
         if (parts.length >= 2) {
           participants.push({
             id: parts[0],
-            name: parts[1],
-            gender: parts[2] ? (parts[2] as 'male' | 'female') : undefined
+            name: parts[1]
           });
         }
       } else if (section === 'outboundVehicles') {
