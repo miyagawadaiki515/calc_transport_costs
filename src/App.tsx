@@ -7,6 +7,7 @@ import CalculationResult from './components/CalculationResult';
 import { calculateRoundTripCosts } from './utils/calculations';
 import { exportToCSV, importFromCSV } from './utils/csv';
 import { Calculator, AlertCircle } from 'lucide-react';
+import logo from '/carpool-logo.svg';
 
 export default function App() {
   const [basicInfo, setBasicInfo] = useState<BasicInfo>({
@@ -269,7 +270,7 @@ export default function App() {
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <h1>
-            <img src="carpool-logo.svg" alt="車割り名人 - 交通費計算アプリ" className="h-12 sm:h-16 w-auto"/>
+            <img src={logo} alt="車割り名人 - 交通費計算アプリ" className="h-12 sm:h-16 w-auto"/>
           </h1>
           <p className="text-xs sm:text-sm text-gray-600 mt-1">複数台の車での移動費用を行き・帰り別々に管理して公平に分配</p>
         </div>
