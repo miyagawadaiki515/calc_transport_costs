@@ -268,7 +268,9 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">交通費計算アプリ（往復対応）</h1>
+          <h1>
+            <img src="carpool-logo.svg" alt="車割り名人 - 交通費計算アプリ" className="h-12 sm:h-16 w-auto"/>
+          </h1>
           <p className="text-xs sm:text-sm text-gray-600 mt-1">複数台の車での移動費用を行き・帰り別々に管理して公平に分配</p>
         </div>
       </header>
