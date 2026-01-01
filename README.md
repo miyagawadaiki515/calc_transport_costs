@@ -12,3 +12,6 @@ $ npm run dev
 ④ブラウザでアクセス
 http://localhost:5173/
 ```
+
+ブラウザでアクセスする場合
+https://calc-transport-costs.vercel.app/
