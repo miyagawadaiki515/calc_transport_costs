@@ -105,21 +105,21 @@ export default function App() {
   const handleRentalCostChange = (id: string, cost: number, direction: 'outbound' | 'return') => {
     const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
     setVehicles(prev =>
-      prev.map(v => v.id === id ? { ...v, rentalCost: cost } : v)
+      prev.map(v => v.id === id ? { ...v, rentalCost: Math.round(cost) } : v)
     );
   };
 
   const handleGasCostChange = (id: string, costDetail: CostDetail | undefined, direction: 'outbound' | 'return') => {
     const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
     setVehicles(prev =>
-      prev.map(v => v.id === id ? { ...v, gasCost: costDetail } : v)
+      prev.map(v => v.id === id ? { ...v, gasCost: costDetail ? { ...costDetail, amount: Math.round(costDetail.amount) } : undefined } : v)
     );
   };
 
   const handleHighwayCostChange = (id: string, costDetail: CostDetail | undefined, direction: 'outbound' | 'return') => {
     const setVehicles = direction === 'outbound' ? setOutboundVehicles : setReturnVehicles;
     setVehicles(prev =>
-      prev.map(v => v.id === id ? { ...v, highwayCost: costDetail } : v)
+      prev.map(v => v.id === id ? { ...v, highwayCost: costDetail ? { ...costDetail, amount: Math.round(costDetail.amount) } : undefined } : v)
     );
   };
 
@@ -181,8 +181,9 @@ export default function App() {
       ...vehicle,
       id: `vehicle-return-${Date.now()}-${Math.random()}`,
       seats: { ...vehicle.seats },
-      gasCost: vehicle.gasCost ? { ...vehicle.gasCost } : undefined,
-      highwayCost: vehicle.highwayCost ? { ...vehicle.highwayCost } : undefined
+      rentalCost: vehicle.rentalCost ? Math.round(vehicle.rentalCost) : undefined,
+      gasCost: vehicle.gasCost ? { amount: Math.round(vehicle.gasCost.amount), type: vehicle.gasCost.type } : undefined,
+      highwayCost: vehicle.highwayCost ? { amount: Math.round(vehicle.highwayCost.amount), type: vehicle.highwayCost.type } : undefined
     }));
     setReturnVehicles(copiedVehicles);
   };
@@ -272,7 +273,12 @@ export default function App() {
           <h1>
             <img src={logo} alt="車割り名人 - 交通費計算アプリ" className="h-12 sm:h-16 w-auto"/>
           </h1>
-          <p className="text-xs sm:text-sm text-gray-600 mt-1">複数台の車での移動費用を行き・帰り別々に管理して公平に分配</p>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1 leading-relaxed">
+            車で割り勘、簡単計算！<br className="sm:hidden" />
+            複数の車で移動した時の交通費を公平に分けて、<br className="sm:hidden" />
+            誰がいくら払うか一発計算。<br className="sm:hidden" />
+            共有用の文章もワンクリックで作成します。
+          </p>
         </div>
       </header>
 

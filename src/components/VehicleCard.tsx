@@ -122,6 +122,7 @@ export default function VehicleCard({
                   onCustomCapacityChange(vehicle.id, 50);
                 }
               }}
+              onWheel={(e) => e.currentTarget.blur()}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
               placeholder="5"
               min="2"
@@ -182,12 +183,13 @@ export default function VehicleCard({
                     if (value === '') {
                       onRentalCostChange(vehicle.id, 0);
                     } else {
-                      const amount = parseFloat(value);
+                      const amount = parseInt(value, 10);
                       if (!isNaN(amount) && amount >= 0) {
                         onRentalCostChange(vehicle.id, amount);
                       }
                     }
                   }}
+                  onWheel={(e) => e.currentTarget.blur()}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                   placeholder="0"
                   min="0"
@@ -220,7 +222,7 @@ export default function VehicleCard({
                     if (value === '') {
                       onGasCostChange(vehicle.id, undefined);
                     } else {
-                      const amount = parseFloat(value);
+                      const amount = parseInt(value, 10);
                       if (!isNaN(amount) && amount >= 0) {
                         onGasCostChange(vehicle.id, {
                           amount,
@@ -229,6 +231,7 @@ export default function VehicleCard({
                       }
                     }
                   }}
+                  onWheel={(e) => e.currentTarget.blur()}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                   placeholder="0"
                   min="0"
@@ -238,7 +241,7 @@ export default function VehicleCard({
                   onChange={(e) => {
                     if (vehicle.gasCost) {
                       onGasCostChange(vehicle.id, {
-                        amount: vehicle.gasCost.amount,
+                        amount: Math.round(vehicle.gasCost.amount),
                         type: e.target.value as 'one-way' | 'round-trip'
                       });
                     }
@@ -277,7 +280,7 @@ export default function VehicleCard({
                     if (value === '') {
                       onHighwayCostChange(vehicle.id, undefined);
                     } else {
-                      const amount = parseFloat(value);
+                      const amount = parseInt(value, 10);
                       if (!isNaN(amount) && amount >= 0) {
                         onHighwayCostChange(vehicle.id, {
                           amount,
@@ -286,6 +289,7 @@ export default function VehicleCard({
                       }
                     }
                   }}
+                  onWheel={(e) => e.currentTarget.blur()}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                   placeholder="0"
                   min="0"
@@ -295,7 +299,7 @@ export default function VehicleCard({
                   onChange={(e) => {
                     if (vehicle.highwayCost) {
                       onHighwayCostChange(vehicle.id, {
-                        amount: vehicle.highwayCost.amount,
+                        amount: Math.round(vehicle.highwayCost.amount),
                         type: e.target.value as 'one-way' | 'round-trip'
                       });
                     }

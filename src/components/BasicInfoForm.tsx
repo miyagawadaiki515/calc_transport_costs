@@ -9,10 +9,14 @@ export default function BasicInfoForm({ basicInfo, onChange }: BasicInfoFormProp
   return (
     <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-6">
       <h2 className="text-lg sm:text-xl font-bold mb-4 text-gray-800">基本情報</h2>
+      <p className="text-xs sm:text-sm text-gray-500 mb-4">
+        入力すると共有用文章の作成時に出力されます。
+      </p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             目的
+            <span className="ml-2 text-xs text-gray-500 font-normal">任意</span>
           </label>
           <input
             type="text"
@@ -25,6 +29,7 @@ export default function BasicInfoForm({ basicInfo, onChange }: BasicInfoFormProp
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             出発日時
+            <span className="ml-2 text-xs text-gray-500 font-normal">任意</span>
           </label>
           <input
             type="datetime-local"
@@ -36,6 +41,7 @@ export default function BasicInfoForm({ basicInfo, onChange }: BasicInfoFormProp
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             集合場所
+            <span className="ml-2 text-xs text-gray-500 font-normal">任意</span>
           </label>
           <input
             type="text"

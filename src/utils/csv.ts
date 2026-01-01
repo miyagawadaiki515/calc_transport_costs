@@ -133,13 +133,16 @@ export function importFromCSV(
         if (line.startsWith('id,type,')) continue;
         const parts = parseCSVLine(line);
         if (parts.length >= 7) {
+          const gasCostData = parts[4] ? JSON.parse(unescapeCSV(parts[4])) : undefined;
+          const highwayCostData = parts[5] ? JSON.parse(unescapeCSV(parts[5])) : undefined;
+
           outboundVehicles.push({
             id: parts[0],
             type: parts[1] as any,
             category: (parts[2] as 'private' | 'rental') || 'private',
-            rentalCost: parts[3] ? parseFloat(parts[3]) : undefined,
-            gasCost: parts[4] ? JSON.parse(unescapeCSV(parts[4])) : undefined,
-            highwayCost: parts[5] ? JSON.parse(unescapeCSV(parts[5])) : undefined,
+            rentalCost: parts[3] ? Math.round(parseInt(parts[3], 10)) : undefined,
+            gasCost: gasCostData ? { ...gasCostData, amount: Math.round(gasCostData.amount) } : undefined,
+            highwayCost: highwayCostData ? { ...highwayCostData, amount: Math.round(highwayCostData.amount) } : undefined,
             seats: JSON.parse(unescapeCSV(parts[6]))
           });
         }
@@ -147,13 +150,16 @@ export function importFromCSV(
         if (line.startsWith('id,type,')) continue;
         const parts = parseCSVLine(line);
         if (parts.length >= 7) {
+          const gasCostData = parts[4] ? JSON.parse(unescapeCSV(parts[4])) : undefined;
+          const highwayCostData = parts[5] ? JSON.parse(unescapeCSV(parts[5])) : undefined;
+
           returnVehicles.push({
             id: parts[0],
             type: parts[1] as any,
             category: (parts[2] as 'private' | 'rental') || 'private',
-            rentalCost: parts[3] ? parseFloat(parts[3]) : undefined,
-            gasCost: parts[4] ? JSON.parse(unescapeCSV(parts[4])) : undefined,
-            highwayCost: parts[5] ? JSON.parse(unescapeCSV(parts[5])) : undefined,
+            rentalCost: parts[3] ? Math.round(parseInt(parts[3], 10)) : undefined,
+            gasCost: gasCostData ? { ...gasCostData, amount: Math.round(gasCostData.amount) } : undefined,
+            highwayCost: highwayCostData ? { ...highwayCostData, amount: Math.round(highwayCostData.amount) } : undefined,
             seats: JSON.parse(unescapeCSV(parts[6]))
           });
         }
