@@ -8,7 +8,7 @@ const pwaIcons = [
 ];
 
 const appleIcon = [
-  { size: 180, name: 'apple-touch-icon.png', svg: './carpool-favicon.svg' }
+  { size: 180, name: 'apple-touch-icon.png', svg: './carpool-pwa-icon.svg' }
 ];
 
 const publicDir = './public';
