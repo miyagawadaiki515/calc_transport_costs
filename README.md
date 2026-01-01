@@ -13,6 +13,6 @@ $ npm run dev
 http://localhost:5173/
 ```
 
-ブラウザでアクセスする場合（別タブで開きます）👇
+ブラウザでアクセスする場合👇
 
 <a href="https://calc-transport-costs.vercel.app/" target="_blank" rel="noopener noreferrer">https://calc-transport-costs.vercel.app/</a>
