@@ -966,7 +966,7 @@ export function generateSimpleTripResultText(
         ? `を${outboundDriver}に支払い`
         : `を行き${outboundDriver}、帰り${returnDriver}に支払い`;
 
-      text += `${pc.name}: 行き${pc.outboundCost}円 + 帰り${pc.returnCost}円 = 合計${pc.totalCost}円${driverText}\n`;
+      text += `${pc.name}: ${pc.totalCost}円${driverText}\n`;
     } else if (pc.outboundCost > 0) {
       const outboundDriver = outboundVehicles.map(v => {
         const driverSeatKey = getDriverSeatKey(v);
@@ -1000,7 +1000,7 @@ export function generateSimpleTripResultText(
   text += '\n【運転手の最終収支】\n';
   result.driverFinalBalances.forEach(balance => {
     const sign = balance.finalBalance >= 0 ? '+' : '';
-    text += `${balance.driverName}: 車両費用合計${balance.totalVehicleCost}円(行き${balance.outboundCost}円+帰り${balance.returnCost}円) - 徴収${balance.collectedAmount}円 = ${sign}${balance.finalBalance}円\n`;
+    text += `${balance.driverName}: ${sign}${balance.finalBalance}円\n`;
   });
 
   return text;
