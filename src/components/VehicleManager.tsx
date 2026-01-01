@@ -130,6 +130,13 @@ export default function VehicleManager({
                 </div>
               );
             })}
+            <button
+              onClick={onAddVehicle}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-md hover:bg-gray-50 transition-colors shadow-sm border border-gray-200 min-h-[44px]"
+            >
+              <Plus size={20} />
+              車を追加
+            </button>
           </div>
 
           <div className="hidden md:flex md:flex-col lg:flex-row gap-6 lg:overflow-x-auto pb-4">
@@ -158,6 +165,15 @@ export default function VehicleManager({
                 </div>
               );
             })}
+            <div className="lg:flex-shrink-0 lg:w-96 flex items-center">
+              <button
+                onClick={onAddVehicle}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-md hover:bg-gray-50 transition-colors shadow-sm border border-gray-200 min-h-[44px]"
+              >
+                <Plus size={20} />
+                車を追加
+              </button>
+            </div>
           </div>
         </>
       )}
