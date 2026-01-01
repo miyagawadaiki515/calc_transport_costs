@@ -36,7 +36,7 @@ function calculateVehicleCost(vehicle: Vehicle, direction: 'outbound' | 'return'
 
 function calculateSinglePattern(
   vehicles: Vehicle[],
-  participants: Participant[],
+  _participants: Participant[],
   totalCost: number,
   totalParticipants: number,
   roundingMode: 'up' | 'down'
@@ -207,7 +207,7 @@ function calculateSinglePattern(
 
 export function calculateTransportationCosts(
   vehicles: Vehicle[],
-  participants: Participant[]
+  _participants: Participant[]
 ): DualCalculationResult {
   const totalCost = vehicles.reduce((sum, v) => sum + calculateVehicleCost(v, 'outbound'), 0);
 
@@ -230,8 +230,8 @@ export function calculateTransportationCosts(
 
   const totalParticipants = allAssignedParticipants.size - driverNames.size;
 
-  const roundUp = calculateSinglePattern(vehicles, participants, totalCost, totalParticipants, 'up');
-  const roundDown = calculateSinglePattern(vehicles, participants, totalCost, totalParticipants, 'down');
+  const roundUp = calculateSinglePattern(vehicles, _participants, totalCost, totalParticipants, 'up');
+  const roundDown = calculateSinglePattern(vehicles, _participants, totalCost, totalParticipants, 'down');
 
   const roundUpTotal = roundUp.driverAdjustments.reduce((sum, adj) => sum + adj.amount, 0);
   const roundDownTotal = roundDown.driverAdjustments.reduce((sum, adj) => sum + adj.amount, 0);
@@ -263,7 +263,7 @@ function formatDateTime(dateTimeString: string): string {
 export function generateResultText(
   basicInfo: { purpose: string; departureTime: string; meetingPlace: string },
   vehicles: Vehicle[],
-  participants: Participant[],
+  _participants: Participant[],
   result: CalculationResult,
   roundingMode: 'up' | 'down'
 ): string {
@@ -686,7 +686,7 @@ export function generateTripResultText(
   basicInfo: { purpose: string; departureTime: string; meetingPlace: string },
   outboundVehicles: Vehicle[],
   returnVehicles: Vehicle[],
-  participants: Participant[],
+  _participants: Participant[],
   result: TripCalculationResult,
   roundingMode: 'up' | 'down',
   outboundAdjustment: number = 0,
@@ -881,7 +881,7 @@ export function generateSimpleTripResultText(
   basicInfo: { purpose: string; departureTime: string; meetingPlace: string },
   outboundVehicles: Vehicle[],
   returnVehicles: Vehicle[],
-  participants: Participant[],
+  _participants: Participant[],
   result: TripCalculationResult,
   outboundAdjustment: number = 0,
   returnAdjustment: number = 0
