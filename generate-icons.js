@@ -27,14 +27,14 @@ async function generateIcons() {
     console.log(`Generated ${name} (square background)`);
   }
 
-  // Apple用アイコンを生成（丸い背景）
+  // Apple用アイコンを生成（四角い背景）
   for (const { size, name, svg } of appleIcon) {
     const svgBuffer = fs.readFileSync(svg);
     await sharp(svgBuffer)
       .resize(size, size)
       .png()
       .toFile(path.join(publicDir, name));
-    console.log(`Generated ${name} (circular background)`);
+    console.log(`Generated ${name} (square background)`);
   }
 
   console.log('All icons generated successfully!');
