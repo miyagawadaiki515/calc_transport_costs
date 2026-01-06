@@ -62,7 +62,7 @@ function calculateSinglePattern(
       passengerCount,
       collectionAmount,
       actualCost,
-      difference: actualCost - collectionAmount
+      difference: actualCost - collectionAmount - perPersonCost
     };
   });
 
@@ -115,8 +115,8 @@ function calculateSinglePattern(
   driverAdjustments.forEach(adj => {
     const giver = driverBalanceMap.get(adj.from);
     const receiver = driverBalanceMap.get(adj.to);
-    if (giver) giver.adjustments -= adj.amount;
-    if (receiver) receiver.adjustments += adj.amount;
+    if (giver) giver.adjustments += adj.amount;
+    if (receiver) receiver.adjustments -= adj.amount;
   });
 
   const driverNames = Array.from(driverBalanceMap.keys());
@@ -125,7 +125,7 @@ function calculateSinglePattern(
   const currentBalances = new Map<string, number>();
   driverNames.forEach(name => {
     const data = driverBalanceMap.get(name)!;
-    currentBalances.set(name, data.collectedAmount - data.vehicleCost + data.adjustments);
+    currentBalances.set(name, data.collectedAmount + perPersonCost - data.vehicleCost - data.adjustments);
   });
 
   const totalBalance = Array.from(currentBalances.values()).reduce((sum, balance) => sum + balance, 0);
@@ -170,8 +170,8 @@ function calculateSinglePattern(
 
       const giverData = driverBalanceMap.get(giver.name)!;
       const receiverData = driverBalanceMap.get(receiver.name)!;
-      giverData.adjustments -= roundedTransferAmount;
-      receiverData.adjustments += roundedTransferAmount;
+      giverData.adjustments += roundedTransferAmount;
+      receiverData.adjustments -= roundedTransferAmount;
     }
 
     giver.amount -= transferAmount;
@@ -185,7 +185,7 @@ function calculateSinglePattern(
     driverName,
     vehicleCost: data.vehicleCost,
     collectedAmount: data.collectedAmount,
-    finalBalance: data.collectedAmount - data.vehicleCost + data.adjustments
+    finalBalance: data.collectedAmount + perPersonCost - data.vehicleCost - data.adjustments
   }));
 
   return {
@@ -228,7 +228,7 @@ export function calculateTransportationCosts(
     });
   });
 
-  const totalParticipants = allAssignedParticipants.size - driverNames.size;
+  const totalParticipants = allAssignedParticipants.size;
 
   const roundUp = calculateSinglePattern(vehicles, _participants, totalCost, totalParticipants, 'up');
   const roundDown = calculateSinglePattern(vehicles, _participants, totalCost, totalParticipants, 'down');
@@ -328,7 +328,7 @@ export function generateResultText(
   text += '\n【運転手の最終収支】\n';
   result.driverFinalBalances.forEach(balance => {
     const sign = balance.finalBalance >= 0 ? '+' : '';
-    text += `${balance.driverName}: 車両費用${balance.vehicleCost}円 - 徴収${balance.collectedAmount}円 = ${sign}${balance.finalBalance}円\n`;
+    text += `${balance.driverName}: 徴収${balance.collectedAmount}円 + 個人負担${result.perPersonCost}円 - 車両費用${balance.vehicleCost}円 - 調整 = ${sign}${balance.finalBalance}円\n`;
   });
 
   return text;
@@ -382,9 +382,9 @@ function calculateTripPattern(
   const allParticipantNames = new Set([...outboundParticipantNames, ...returnParticipantNames]);
   const allDriverNames = new Set([...outboundDriverNames, ...returnDriverNames]);
 
-  const outboundParticipants = outboundParticipantNames.size - outboundDriverNames.size;
-  const returnParticipants = returnParticipantNames.size - returnDriverNames.size;
-  const allParticipants = allParticipantNames.size - allDriverNames.size;
+  const outboundParticipants = outboundParticipantNames.size;
+  const returnParticipants = returnParticipantNames.size;
+  const allParticipants = allParticipantNames.size;
 
   const rawOutboundPerPerson = outboundParticipants > 0 ? outboundCost / outboundParticipants : 0;
   const rawReturnPerPerson = returnParticipants > 0 ? returnCost / returnParticipants : 0;
@@ -454,12 +454,12 @@ function calculateTripPattern(
   const driverDifferences = new Map<string, number>();
 
   outboundCollections.forEach(vc => {
-    const diff = vc.actualCost - vc.collectionAmount;
+    const diff = vc.actualCost - vc.collectionAmount - outboundPerPerson;
     driverDifferences.set(vc.driverName, (driverDifferences.get(vc.driverName) || 0) + diff);
   });
 
   returnCollections.forEach(vc => {
-    const diff = vc.actualCost - vc.collectionAmount;
+    const diff = vc.actualCost - vc.collectionAmount - returnPerPerson;
     driverDifferences.set(vc.driverName, (driverDifferences.get(vc.driverName) || 0) + diff);
   });
 
@@ -516,8 +516,8 @@ function calculateTripPattern(
   driverAdjustments.forEach(adj => {
     const giver = driverBalanceMap.get(adj.from);
     const receiver = driverBalanceMap.get(adj.to);
-    if (giver) giver.adjustments -= adj.amount;
-    if (receiver) receiver.adjustments += adj.amount;
+    if (giver) giver.adjustments += adj.amount;
+    if (receiver) receiver.adjustments -= adj.amount;
   });
 
   const driverNames = Array.from(driverBalanceMap.keys());
@@ -526,7 +526,8 @@ function calculateTripPattern(
   const currentBalances = new Map<string, number>();
   driverNames.forEach(name => {
     const data = driverBalanceMap.get(name)!;
-    currentBalances.set(name, data.collectedAmount - (data.outboundCost + data.returnCost) + data.adjustments);
+    const driverPersonalCost = (data.outboundCost > 0 ? outboundPerPerson : 0) + (data.returnCost > 0 ? returnPerPerson : 0);
+    currentBalances.set(name, data.collectedAmount + driverPersonalCost - (data.outboundCost + data.returnCost) - data.adjustments);
   });
 
   const totalBalance = Array.from(currentBalances.values()).reduce((sum, balance) => sum + balance, 0);
@@ -571,8 +572,8 @@ function calculateTripPattern(
 
       const giverData = driverBalanceMap.get(giver.name)!;
       const receiverData = driverBalanceMap.get(receiver.name)!;
-      giverData.adjustments -= roundedTransferAmount;
-      receiverData.adjustments += roundedTransferAmount;
+      giverData.adjustments += roundedTransferAmount;
+      receiverData.adjustments -= roundedTransferAmount;
     }
 
     giver.amount -= transferAmount;
@@ -582,14 +583,17 @@ function calculateTripPattern(
     if (receiver.amount === 0) ej++;
   }
 
-  const driverFinalBalances = Array.from(driverBalanceMap.entries()).map(([driverName, data]) => ({
-    driverName,
-    outboundCost: data.outboundCost,
-    returnCost: data.returnCost,
-    totalVehicleCost: data.outboundCost + data.returnCost,
-    collectedAmount: data.collectedAmount,
-    finalBalance: data.collectedAmount - (data.outboundCost + data.returnCost) + data.adjustments
-  }));
+  const driverFinalBalances = Array.from(driverBalanceMap.entries()).map(([driverName, data]) => {
+    const driverPersonalCost = (data.outboundCost > 0 ? outboundPerPerson : 0) + (data.returnCost > 0 ? returnPerPerson : 0);
+    return {
+      driverName,
+      outboundCost: data.outboundCost,
+      returnCost: data.returnCost,
+      totalVehicleCost: data.outboundCost + data.returnCost,
+      collectedAmount: data.collectedAmount,
+      finalBalance: data.collectedAmount + driverPersonalCost - (data.outboundCost + data.returnCost) - data.adjustments
+    };
+  });
 
   return {
     outboundCost,
@@ -871,7 +875,11 @@ export function generateTripResultText(
   text += '\n【運転手の最終収支】\n';
   result.driverFinalBalances.forEach(balance => {
     const sign = balance.finalBalance >= 0 ? '+' : '';
-    text += `${balance.driverName}: 車両費用合計${balance.totalVehicleCost}円(行き${balance.outboundCost}円+帰り${balance.returnCost}円) - 徴収${balance.collectedAmount}円 = ${sign}${balance.finalBalance}円\n`;
+    const personalCostParts = [];
+    if (balance.outboundCost > 0) personalCostParts.push(`行き${result.outboundPerPerson}円`);
+    if (balance.returnCost > 0) personalCostParts.push(`帰り${result.returnPerPerson}円`);
+    const personalCostText = personalCostParts.join('+');
+    text += `${balance.driverName}: 徴収${balance.collectedAmount}円 + 個人負担(${personalCostText}) - 車両費用合計${balance.totalVehicleCost}円(行き${balance.outboundCost}円+帰り${balance.returnCost}円) - 調整 = ${sign}${balance.finalBalance}円\n`;
   });
 
   return text;
