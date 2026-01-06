@@ -328,7 +328,7 @@ export function generateResultText(
   text += '\n【運転手の最終収支】\n';
   result.driverFinalBalances.forEach(balance => {
     const sign = balance.finalBalance >= 0 ? '+' : '';
-    text += `${balance.driverName}: 徴収${balance.collectedAmount}円 + 個人負担${result.perPersonCost}円 - 車両費用${balance.vehicleCost}円 - 調整 = ${sign}${balance.finalBalance}円\n`;
+    text += `${balance.driverName}: 徴収${balance.collectedAmount}円 + 運転手の個人負担${result.perPersonCost}円 - 車両費用${balance.vehicleCost}円 - 調整 = ${sign}${balance.finalBalance}円\n`;
   });
 
   return text;
@@ -879,7 +879,7 @@ export function generateTripResultText(
     if (balance.outboundCost > 0) personalCostParts.push(`行き${result.outboundPerPerson}円`);
     if (balance.returnCost > 0) personalCostParts.push(`帰り${result.returnPerPerson}円`);
     const personalCostText = personalCostParts.join('+');
-    text += `${balance.driverName}: 徴収${balance.collectedAmount}円 + 個人負担(${personalCostText}) - 車両費用合計${balance.totalVehicleCost}円(行き${balance.outboundCost}円+帰り${balance.returnCost}円) - 調整 = ${sign}${balance.finalBalance}円\n`;
+    text += `${balance.driverName}: 徴収${balance.collectedAmount}円 + 運転手の個人負担(${personalCostText}) - 車両費用合計${balance.totalVehicleCost}円(行き${balance.outboundCost}円+帰り${balance.returnCost}円) - 調整 = ${sign}${balance.finalBalance}円\n`;
   });
 
   return text;
